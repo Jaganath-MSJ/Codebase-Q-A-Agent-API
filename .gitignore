@@ -1,0 +1,28 @@
+node_modules/
+dist/
+build/
+
+# Secrets
+.env
+.env.local
+.env.*.local
+
+# Runtime data — cloned repos, ONNX model weights, response caches, uploads.
+# Reaches hundreds of megabytes. Never commit this.
+/data/
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# Test output
+coverage/
+.vitest/
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
