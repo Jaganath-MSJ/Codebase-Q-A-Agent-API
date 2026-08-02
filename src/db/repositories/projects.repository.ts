@@ -22,4 +22,16 @@ export class ProjectsRepository {
     const [row] = await this.db.select().from(projects).where(eq(projects.id, id));
     return row;
   }
+
+  async updateCounts(
+    id: string,
+    data: { status: string; fileCount: number; chunkCount: number },
+  ): Promise<ProjectRow | undefined> {
+    const [row] = await this.db
+      .update(projects)
+      .set(data)
+      .where(eq(projects.id, id))
+      .returning();
+    return row;
+  }
 }

@@ -1,6 +1,7 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
 import { ApiOkResponse, ApiCreatedResponse, ApiTags } from '@nestjs/swagger';
 import { ProjectsService } from './projects.service';
+import { IndexingService } from '../indexing/indexing.service';
 import { CreateProjectDto, ProjectDto } from '../contracts';
 import { ProjectRow } from '../db/schema';
 
@@ -20,7 +21,10 @@ function toDto(row: ProjectRow): ProjectDto {
 @ApiTags('projects')
 @Controller('projects')
 export class ProjectsController {
-  constructor(private readonly projectsService: ProjectsService) {}
+  constructor(
+    private readonly projectsService: ProjectsService,
+    private readonly indexingService: IndexingService,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -35,5 +39,13 @@ export class ProjectsController {
   async findAll(): Promise<ProjectDto[]> {
     const rows = await this.projectsService.findAll();
     return rows.map(toDto);
+  }
+
+  @Post(':id/index')
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({ type: ProjectDto })
+  async index(@Param('id') id: string): Promise<ProjectDto> {
+    const row = await this.indexingService.indexProject(id);
+    return toDto(row);
   }
 }

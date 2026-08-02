@@ -5,6 +5,8 @@ import { createPool, createDb } from './pool';
 import type { Db } from './pool';
 import { runMigrations } from './migrate';
 import { ProjectsRepository } from './repositories/projects.repository';
+import { FilesRepository } from './repositories/files.repository';
+import { ChunksRepository } from './repositories/chunks.repository';
 import { DB_TOKEN, PG_POOL_TOKEN } from './tokens';
 
 @Global()
@@ -21,8 +23,10 @@ import { DB_TOKEN, PG_POOL_TOKEN } from './tokens';
       useFactory: (pool: Pool) => createDb(pool),
     },
     ProjectsRepository,
+    FilesRepository,
+    ChunksRepository,
   ],
-  exports: [DB_TOKEN, ProjectsRepository],
+  exports: [DB_TOKEN, ProjectsRepository, FilesRepository, ChunksRepository],
 })
 export class DbModule implements OnModuleInit {
   constructor(@Inject(DB_TOKEN) private readonly db: Db) {}

@@ -1,0 +1,6 @@
+{
+  "name": "tiny-repo",
+  "version": "0.0.1",
+  "description": "Fixture repo for the codebase Q&A agent's Phase 1 tests",
+  "private": true
+}

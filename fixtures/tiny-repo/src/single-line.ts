@@ -1,0 +1,1 @@
+export const ONE_LINE_FILE = 'this file has exactly one line and no trailing newline';
