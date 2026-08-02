@@ -8,11 +8,21 @@ import { readSourceFile } from '../common/read-file';
 import { sha256 } from '../common/hash';
 import { CHUNKER_TOKEN } from '../chunking/chunking.module';
 import type { Chunker } from '../chunking/chunker.interface';
+import { EMBEDDING_PROVIDER_TOKEN } from '../embeddings/embeddings.module';
+import type { EmbeddingProvider } from '../embeddings/embedding-provider.interface';
 import type { ProjectRow, NewChunkRow } from '../db/schema';
 
 function langFromPath(relPath: string): string | null {
   const ext = path.extname(relPath).slice(1).toLowerCase();
   return ext || null;
+}
+
+function batch<T>(items: T[], size: number): T[][] {
+  const batches: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    batches.push(items.slice(i, i + size));
+  }
+  return batches;
 }
 
 @Injectable()
@@ -23,6 +33,7 @@ export class IndexingService {
     private readonly chunksRepository: ChunksRepository,
     private readonly walkerService: WalkerService,
     @Inject(CHUNKER_TOKEN) private readonly chunker: Chunker,
+    @Inject(EMBEDDING_PROVIDER_TOKEN) private readonly embeddingProvider: EmbeddingProvider,
   ) {}
 
   async indexProject(projectId: string): Promise<ProjectRow> {
@@ -64,13 +75,40 @@ export class IndexingService {
       chunkCount += chunkRows.length;
     }
 
-    const updated = await this.projectsRepository.updateCounts(projectId, {
+    await this.projectsRepository.update(projectId, {
       status: 'indexed',
       fileCount: walked.length,
       chunkCount,
     });
+
+    await this.embedPendingChunks(projectId);
+
+    const updated = await this.projectsRepository.update(projectId, {
+      status: 'ready',
+      embeddingModel: this.embeddingProvider.id,
+      embeddingDim: this.embeddingProvider.dimensions,
+    });
     if (!updated) throw new NotFoundException(`Project ${projectId} not found`);
 
     return updated;
+  }
+
+  private async embedPendingChunks(projectId: string): Promise<void> {
+    if (this.embeddingProvider.dimensions !== 768) {
+      throw new Error(
+        `Embedding provider '${this.embeddingProvider.id}' reports ${this.embeddingProvider.dimensions} dimensions; this project requires exactly 768.`,
+      );
+    }
+
+    const pending = await this.chunksRepository.findWithoutEmbedding(projectId);
+
+    for (const group of batch(pending, this.embeddingProvider.maxBatchSize)) {
+      const vectors = await this.embeddingProvider.embedDocuments(group.map((c) => c.content));
+      for (let i = 0; i < group.length; i++) {
+        const chunk = group[i]!;
+        const vector = vectors[i]!;
+        await this.chunksRepository.setEmbedding(chunk.id, vector);
+      }
+    }
   }
 }

@@ -23,9 +23,11 @@ export class ProjectsRepository {
     return row;
   }
 
-  async updateCounts(
+  async update(
     id: string,
-    data: { status: string; fileCount: number; chunkCount: number },
+    data: Partial<
+      Pick<NewProjectRow, 'status' | 'fileCount' | 'chunkCount' | 'embeddingModel' | 'embeddingDim'>
+    >,
   ): Promise<ProjectRow | undefined> {
     const [row] = await this.db
       .update(projects)

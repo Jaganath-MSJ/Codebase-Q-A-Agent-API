@@ -15,6 +15,13 @@
       "when": 1785664513929,
       "tag": "0001_files_and_chunks",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785667025527,
+      "tag": "0002_project_embedding_fields",
+      "breakpoints": true
     }
   ]
 }

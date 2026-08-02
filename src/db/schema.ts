@@ -16,6 +16,8 @@ export const projects = pgTable('projects', {
   status: text('status').notNull().default('created'),
   fileCount: integer('file_count').notNull().default(0),
   chunkCount: integer('chunk_count').notNull().default(0),
+  embeddingModel: text('embedding_model'),
+  embeddingDim: integer('embedding_dim'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
