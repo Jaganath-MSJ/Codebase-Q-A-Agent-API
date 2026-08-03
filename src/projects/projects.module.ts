@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
-import { IndexingModule } from '../indexing/indexing.module';
+import { JobsModule } from '../jobs/jobs.module';
 import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
 
 @Module({
-  imports: [IndexingModule],
+  imports: [JobsModule],
   controllers: [ProjectsController],
   providers: [ProjectsService],
 })

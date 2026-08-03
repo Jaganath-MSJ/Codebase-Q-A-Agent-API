@@ -1,8 +1,9 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
-import { ApiOkResponse, ApiCreatedResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOkResponse, ApiCreatedResponse, ApiAcceptedResponse, ApiTags } from '@nestjs/swagger';
 import { ProjectsService } from './projects.service';
-import { IndexingService } from '../indexing/indexing.service';
-import { CreateProjectDto, ProjectDto } from '../contracts';
+import { JobsService } from '../jobs/jobs.service';
+import { toJobDto } from '../jobs/jobs.controller';
+import { CreateProjectDto, ProjectDto, JobDto } from '../contracts';
 import { ProjectRow } from '../db/schema';
 
 function toDto(row: ProjectRow): ProjectDto {
@@ -23,7 +24,7 @@ function toDto(row: ProjectRow): ProjectDto {
 export class ProjectsController {
   constructor(
     private readonly projectsService: ProjectsService,
-    private readonly indexingService: IndexingService,
+    private readonly jobsService: JobsService,
   ) {}
 
   @Post()
@@ -42,10 +43,10 @@ export class ProjectsController {
   }
 
   @Post(':id/index')
-  @HttpCode(HttpStatus.OK)
-  @ApiOkResponse({ type: ProjectDto })
-  async index(@Param('id') id: string): Promise<ProjectDto> {
-    const row = await this.indexingService.indexProject(id);
-    return toDto(row);
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiAcceptedResponse({ type: JobDto })
+  async index(@Param('id') id: string): Promise<JobDto> {
+    const job = await this.jobsService.enqueue(id);
+    return toJobDto(job);
   }
 }

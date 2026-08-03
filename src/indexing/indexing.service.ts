@@ -36,15 +36,20 @@ export class IndexingService {
     @Inject(EMBEDDING_PROVIDER_TOKEN) private readonly embeddingProvider: EmbeddingProvider,
   ) {}
 
-  async indexProject(projectId: string): Promise<ProjectRow> {
+  async indexProject(
+    projectId: string,
+    onProgress?: (filesDone: number, filesTotal: number) => Promise<void> | void,
+  ): Promise<ProjectRow> {
     const project = await this.projectsRepository.findById(projectId);
     if (!project) throw new NotFoundException(`Project ${projectId} not found`);
 
     const walked = await this.walkerService.walk(project.sourceRef);
+    await onProgress?.(0, walked.length);
 
     await this.filesRepository.deleteByProjectId(projectId);
 
     let chunkCount = 0;
+    let filesDone = 0;
 
     for (const entry of walked) {
       const { text, lines } = await readSourceFile(entry.absPath);
@@ -73,6 +78,9 @@ export class IndexingService {
 
       await this.chunksRepository.insertMany(chunkRows);
       chunkCount += chunkRows.length;
+
+      filesDone++;
+      await onProgress?.(filesDone, walked.length);
     }
 
     await this.projectsRepository.update(projectId, {

@@ -6,7 +6,11 @@ import {
   timestamp,
   vector,
   unique,
+  uniqueIndex,
+  index,
+  check,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 export const projects = pgTable('projects', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -64,3 +68,34 @@ export const chunks = pgTable(
 
 export type ChunkRow = typeof chunks.$inferSelect;
 export type NewChunkRow = typeof chunks.$inferInsert;
+
+export const indexingJobs = pgTable(
+  'indexing_jobs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    status: text('status').notNull().default('queued'),
+    trigger: text('trigger').notNull().default('initial'),
+    filesTotal: integer('files_total').notNull().default(0),
+    filesDone: integer('files_done').notNull().default(0),
+    errorMessage: text('error_message'),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      'indexing_jobs_status_check',
+      sql`${table.status} IN ('queued','running','succeeded','failed','canceled')`,
+    ),
+    index('indexing_jobs_status_created_idx').on(table.status, table.createdAt),
+    uniqueIndex('one_active_job_per_project')
+      .on(table.projectId)
+      .where(sql`${table.status} IN ('queued','running')`),
+  ],
+);
+
+export type IndexingJobRow = typeof indexingJobs.$inferSelect;
+export type NewIndexingJobRow = typeof indexingJobs.$inferInsert;
