@@ -8,5 +8,6 @@ import { SearchController } from './search.controller';
   imports: [EmbeddingsModule],
   controllers: [SearchController],
   providers: [VectorRetriever, RetrievalService],
+  exports: [RetrievalService],
 })
 export class RetrievalModule {}

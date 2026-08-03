@@ -30,4 +30,8 @@ export class ConfigService {
   get port(): number {
     return this.env.PORT;
   }
+
+  get llmCacheEnabled(): boolean {
+    return this.env.NODE_ENV !== 'production' && this.env.LLM_CACHE !== 'off';
+  }
 }

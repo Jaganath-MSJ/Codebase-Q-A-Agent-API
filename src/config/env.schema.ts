@@ -7,6 +7,8 @@ const envSchema = z.object({
   CHAT_PROVIDER: z.enum(['gemini', 'groq']).default('gemini'),
   DATA_DIR: z.string().default('./data'),
   PORT: z.coerce.number().default(3000),
+  NODE_ENV: z.string().default('development'),
+  LLM_CACHE: z.enum(['on', 'off']).default('on'),
 });
 
 export type Env = z.infer<typeof envSchema>;
