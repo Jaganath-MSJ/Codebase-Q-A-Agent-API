@@ -6,6 +6,7 @@ import type { IndexingJobRow } from '../db/schema';
 import { JOB_CREATED_EVENT, JOB_EVENTS_TOKEN } from './job-events';
 
 const SAFETY_POLL_MS = 60_000;
+const NUL_BYTE = String.fromCharCode(0);
 
 /**
  * Runs in-process. Wakes on `job.created` instead of polling, so an idle
@@ -53,14 +54,25 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
 
   private async runJob(job: IndexingJobRow): Promise<void> {
     try {
-      await this.indexingService.indexProject(job.projectId, (filesDone, filesTotal) =>
-        this.jobsRepository.updateProgress(job.id, { filesDone, filesTotal }),
+      await this.indexingService.indexProject(job.projectId, (update) =>
+        this.jobsRepository.updateProgress(job.id, update),
       );
       await this.jobsRepository.markSucceeded(job.id);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const rawMessage = err instanceof Error ? err.message : String(err);
+      // Postgres text columns can never store a NUL byte; strip it so a failure this
+      // ugly (e.g. a source file with an embedded NUL) can still be recorded, not just logged.
+      const message = rawMessage.split(NUL_BYTE).join('');
       this.logger.error(`Job ${job.id} for project ${job.projectId} failed: ${message}`);
-      await this.jobsRepository.markFailed(job.id, message);
+      try {
+        await this.jobsRepository.markFailed(job.id, message);
+      } catch (markErr) {
+        this.logger.error(
+          `Job ${job.id} failed and recording that failure also failed: ${
+            markErr instanceof Error ? markErr.message : String(markErr)
+          }`,
+        );
+      }
     }
   }
 }

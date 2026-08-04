@@ -2,7 +2,14 @@ import { Inject, Injectable } from '@nestjs/common';
 import { desc, eq } from 'drizzle-orm';
 import type { Db } from '../pool';
 import { DB_TOKEN } from '../tokens';
-import { indexingJobs, IndexingJobRow } from '../schema';
+import { indexingJobs, IndexingJobRow, NewIndexingJobRow } from '../schema';
+
+export type ProgressUpdate = Partial<
+  Pick<
+    NewIndexingJobRow,
+    'phase' | 'currentPath' | 'filesTotal' | 'filesDone' | 'chunksTotal' | 'chunksEmbedded'
+  >
+>;
 
 @Injectable()
 export class JobsRepository {
@@ -46,7 +53,7 @@ export class JobsRepository {
     });
   }
 
-  async updateProgress(id: string, data: { filesTotal?: number; filesDone?: number }): Promise<void> {
+  async updateProgress(id: string, data: ProgressUpdate): Promise<void> {
     await this.db.update(indexingJobs).set(data).where(eq(indexingJobs.id, id));
   }
 

@@ -29,6 +29,13 @@
       "when": 1785773873705,
       "tag": "0003_indexing_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785776134940,
+      "tag": "0004_honest_progress",
+      "breakpoints": true
     }
   ]
 }

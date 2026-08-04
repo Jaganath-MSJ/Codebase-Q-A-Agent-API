@@ -25,6 +25,17 @@ function batch<T>(items: T[], size: number): T[][] {
   return batches;
 }
 
+export interface IndexProgress {
+  phase: 'walking' | 'chunking' | 'embedding' | 'finalizing';
+  currentPath?: string;
+  filesDone?: number;
+  filesTotal?: number;
+  chunksTotal?: number;
+  chunksEmbedded?: number;
+}
+
+export type OnIndexProgress = (update: IndexProgress) => Promise<void> | void;
+
 @Injectable()
 export class IndexingService {
   constructor(
@@ -36,20 +47,18 @@ export class IndexingService {
     @Inject(EMBEDDING_PROVIDER_TOKEN) private readonly embeddingProvider: EmbeddingProvider,
   ) {}
 
-  async indexProject(
-    projectId: string,
-    onProgress?: (filesDone: number, filesTotal: number) => Promise<void> | void,
-  ): Promise<ProjectRow> {
+  async indexProject(projectId: string, onProgress?: OnIndexProgress): Promise<ProjectRow> {
     const project = await this.projectsRepository.findById(projectId);
     if (!project) throw new NotFoundException(`Project ${projectId} not found`);
 
+    await onProgress?.({ phase: 'walking' });
     const walked = await this.walkerService.walk(project.sourceRef);
-    await onProgress?.(0, walked.length);
 
     await this.filesRepository.deleteByProjectId(projectId);
 
     let chunkCount = 0;
     let filesDone = 0;
+    await onProgress?.({ phase: 'chunking', filesDone, filesTotal: walked.length });
 
     for (const entry of walked) {
       const { text, lines } = await readSourceFile(entry.absPath);
@@ -80,7 +89,12 @@ export class IndexingService {
       chunkCount += chunkRows.length;
 
       filesDone++;
-      await onProgress?.(filesDone, walked.length);
+      await onProgress?.({
+        phase: 'chunking',
+        currentPath: entry.relPath,
+        filesDone,
+        filesTotal: walked.length,
+      });
     }
 
     await this.projectsRepository.update(projectId, {
@@ -89,7 +103,8 @@ export class IndexingService {
       chunkCount,
     });
 
-    await this.embedPendingChunks(projectId);
+    await this.embedPendingChunks(projectId, onProgress);
+    await onProgress?.({ phase: 'finalizing' });
 
     const updated = await this.projectsRepository.update(projectId, {
       status: 'ready',
@@ -101,7 +116,7 @@ export class IndexingService {
     return updated;
   }
 
-  private async embedPendingChunks(projectId: string): Promise<void> {
+  private async embedPendingChunks(projectId: string, onProgress?: OnIndexProgress): Promise<void> {
     if (this.embeddingProvider.dimensions !== 768) {
       throw new Error(
         `Embedding provider '${this.embeddingProvider.id}' reports ${this.embeddingProvider.dimensions} dimensions; this project requires exactly 768.`,
@@ -109,6 +124,9 @@ export class IndexingService {
     }
 
     const pending = await this.chunksRepository.findWithoutEmbedding(projectId);
+    const chunksTotal = pending.length;
+    let chunksEmbedded = 0;
+    await onProgress?.({ phase: 'embedding', chunksTotal, chunksEmbedded });
 
     for (const group of batch(pending, this.embeddingProvider.maxBatchSize)) {
       const vectors = await this.embeddingProvider.embedDocuments(group.map((c) => c.content));
@@ -117,6 +135,8 @@ export class IndexingService {
         const vector = vectors[i]!;
         await this.chunksRepository.setEmbedding(chunk.id, vector);
       }
+      chunksEmbedded += group.length;
+      await onProgress?.({ phase: 'embedding', chunksTotal, chunksEmbedded });
     }
   }
 }

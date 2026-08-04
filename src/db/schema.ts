@@ -77,9 +77,13 @@ export const indexingJobs = pgTable(
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
     status: text('status').notNull().default('queued'),
+    phase: text('phase'),
     trigger: text('trigger').notNull().default('initial'),
     filesTotal: integer('files_total').notNull().default(0),
     filesDone: integer('files_done').notNull().default(0),
+    chunksTotal: integer('chunks_total').notNull().default(0),
+    chunksEmbedded: integer('chunks_embedded').notNull().default(0),
+    currentPath: text('current_path'),
     errorMessage: text('error_message'),
     startedAt: timestamp('started_at', { withTimezone: true }),
     finishedAt: timestamp('finished_at', { withTimezone: true }),
@@ -89,6 +93,10 @@ export const indexingJobs = pgTable(
     check(
       'indexing_jobs_status_check',
       sql`${table.status} IN ('queued','running','succeeded','failed','canceled')`,
+    ),
+    check(
+      'indexing_jobs_phase_check',
+      sql`${table.phase} IN ('acquiring','walking','chunking','embedding','finalizing')`,
     ),
     index('indexing_jobs_status_created_idx').on(table.status, table.createdAt),
     uniqueIndex('one_active_job_per_project')
