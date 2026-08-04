@@ -1,9 +1,9 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import type { EventEmitter } from 'node:events';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { JobsRepository } from '../db/repositories/jobs.repository';
 import { IndexingService } from '../indexing/indexing.service';
+import { ProgressReporter } from '../indexing/progress.reporter';
+import { EventBusService } from '../events/event-bus.service';
 import type { IndexingJobRow } from '../db/schema';
-import { JOB_CREATED_EVENT, JOB_EVENTS_TOKEN } from './job-events';
 
 const SAFETY_POLL_MS = 60_000;
 const NUL_BYTE = String.fromCharCode(0);
@@ -22,9 +22,10 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly jobsRepository: JobsRepository,
     private readonly indexingService: IndexingService,
-    @Inject(JOB_EVENTS_TOKEN) private readonly events: EventEmitter,
+    private readonly progressReporter: ProgressReporter,
+    private readonly eventBus: EventBusService,
   ) {
-    this.events.on(JOB_CREATED_EVENT, () => {
+    this.eventBus.on('job.created').subscribe(() => {
       void this.drain();
     });
   }
@@ -54,9 +55,7 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
 
   private async runJob(job: IndexingJobRow): Promise<void> {
     try {
-      await this.indexingService.indexProject(job.projectId, (update) =>
-        this.jobsRepository.updateProgress(job.id, update),
-      );
+      await this.indexingService.indexProject(job.projectId, this.progressReporter.forJob(job));
       await this.jobsRepository.markSucceeded(job.id);
     } catch (err) {
       const rawMessage = err instanceof Error ? err.message : String(err);
@@ -74,5 +73,6 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
         );
       }
     }
+    this.eventBus.emit({ type: 'job.completed', projectId: job.projectId, jobId: job.id });
   }
 }

@@ -1,9 +1,8 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import type { EventEmitter } from 'node:events';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { JobsRepository } from '../db/repositories/jobs.repository';
 import { ProjectsRepository } from '../db/repositories/projects.repository';
+import { EventBusService } from '../events/event-bus.service';
 import type { IndexingJobRow } from '../db/schema';
-import { JOB_CREATED_EVENT, JOB_EVENTS_TOKEN } from './job-events';
 
 function pgErrorCode(err: unknown): string | undefined {
   if (typeof err !== 'object' || err === null) return undefined;
@@ -20,7 +19,7 @@ export class JobsService {
   constructor(
     private readonly jobsRepository: JobsRepository,
     private readonly projectsRepository: ProjectsRepository,
-    @Inject(JOB_EVENTS_TOKEN) private readonly events: EventEmitter,
+    private readonly eventBus: EventBusService,
   ) {}
 
   async enqueue(projectId: string, trigger = 'initial'): Promise<IndexingJobRow> {
@@ -29,7 +28,7 @@ export class JobsService {
 
     try {
       const job = await this.jobsRepository.enqueue(projectId, trigger);
-      this.events.emit(JOB_CREATED_EVENT);
+      this.eventBus.emit({ type: 'job.created', projectId, jobId: job.id });
       return job;
     } catch (err) {
       if (isUniqueViolation(err)) {
