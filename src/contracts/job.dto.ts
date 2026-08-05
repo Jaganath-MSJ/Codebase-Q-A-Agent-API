@@ -7,7 +7,7 @@ export class JobDto {
   @ApiProperty()
   projectId!: string;
 
-  @ApiProperty({ enum: ['queued', 'running', 'succeeded', 'failed', 'canceled'] })
+  @ApiProperty({ enum: ['queued', 'running', 'succeeded', 'failed', 'canceled', 'paused'] })
   status!: string;
 
   @ApiProperty({
@@ -30,13 +30,25 @@ export class JobDto {
   filesDone!: number;
 
   @ApiProperty()
+  filesSkipped!: number;
+
+  @ApiProperty({ type: 'object', additionalProperties: { type: 'number' } })
+  skipReasons!: Record<string, number>;
+
+  @ApiProperty()
   chunksTotal!: number;
 
   @ApiProperty()
   chunksEmbedded!: number;
 
+  @ApiProperty()
+  embedRequests!: number;
+
   @ApiProperty({ type: String, nullable: true })
   currentPath!: string | null;
+
+  @ApiProperty()
+  cancelRequested!: boolean;
 
   @ApiProperty({ type: String, nullable: true })
   errorMessage!: string | null;

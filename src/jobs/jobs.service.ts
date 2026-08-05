@@ -41,4 +41,9 @@ export class JobsService {
   async findLatest(projectId: string): Promise<IndexingJobRow | undefined> {
     return this.jobsRepository.findLatestByProject(projectId);
   }
+
+  /** Returns null if the job doesn't exist or is already in a terminal state. */
+  async cancel(jobId: string): Promise<'canceled' | 'canceling' | null> {
+    return this.jobsRepository.requestCancel(jobId);
+  }
 }

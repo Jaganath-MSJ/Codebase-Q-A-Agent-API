@@ -1,5 +1,14 @@
-import { Controller, Get, NotFoundException, Param } from '@nestjs/common';
-import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ConflictException,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  NotFoundException,
+  Param,
+  Post,
+} from '@nestjs/common';
+import { ApiOkResponse, ApiAcceptedResponse, ApiTags } from '@nestjs/swagger';
 import { JobsService } from './jobs.service';
 import { JobDto } from '../contracts';
 import { IndexingJobRow } from '../db/schema';
@@ -14,9 +23,13 @@ export function toJobDto(row: IndexingJobRow): JobDto {
     attempt: row.attempt,
     filesTotal: row.filesTotal,
     filesDone: row.filesDone,
+    filesSkipped: row.filesSkipped,
+    skipReasons: row.skipReasons,
     chunksTotal: row.chunksTotal,
     chunksEmbedded: row.chunksEmbedded,
+    embedRequests: row.embedRequests,
     currentPath: row.currentPath,
+    cancelRequested: row.cancelRequested,
     errorMessage: row.errorMessage,
     startedAt: row.startedAt?.toISOString() ?? null,
     finishedAt: row.finishedAt?.toISOString() ?? null,
@@ -25,15 +38,24 @@ export function toJobDto(row: IndexingJobRow): JobDto {
 }
 
 @ApiTags('jobs')
-@Controller('projects/:projectId/jobs')
+@Controller()
 export class JobsController {
   constructor(private readonly jobsService: JobsService) {}
 
-  @Get('latest')
+  @Get('projects/:projectId/jobs/latest')
   @ApiOkResponse({ type: JobDto })
   async latest(@Param('projectId') projectId: string): Promise<JobDto> {
     const job = await this.jobsService.findLatest(projectId);
     if (!job) throw new NotFoundException(`No indexing jobs for project ${projectId}`);
     return toJobDto(job);
+  }
+
+  @Post('jobs/:jobId/cancel')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiAcceptedResponse({ schema: { properties: { status: { enum: ['canceled', 'canceling'] } } } })
+  async cancel(@Param('jobId') jobId: string): Promise<{ status: 'canceled' | 'canceling' }> {
+    const result = await this.jobsService.cancel(jobId);
+    if (!result) throw new ConflictException(`Job ${jobId} is not active`);
+    return { status: result };
   }
 }

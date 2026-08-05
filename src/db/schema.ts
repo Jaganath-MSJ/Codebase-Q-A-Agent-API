@@ -9,6 +9,8 @@ import {
   uniqueIndex,
   index,
   check,
+  boolean,
+  jsonb,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -81,12 +83,16 @@ export const indexingJobs = pgTable(
     trigger: text('trigger').notNull().default('initial'),
     filesTotal: integer('files_total').notNull().default(0),
     filesDone: integer('files_done').notNull().default(0),
+    filesSkipped: integer('files_skipped').notNull().default(0),
+    skipReasons: jsonb('skip_reasons').notNull().default({}).$type<Record<string, number>>(),
     chunksTotal: integer('chunks_total').notNull().default(0),
     chunksEmbedded: integer('chunks_embedded').notNull().default(0),
+    embedRequests: integer('embed_requests').notNull().default(0),
     currentPath: text('current_path'),
     attempt: integer('attempt').notNull().default(1),
     maxAttempts: integer('max_attempts').notNull().default(3),
     leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }),
+    cancelRequested: boolean('cancel_requested').notNull().default(false),
     errorMessage: text('error_message'),
     startedAt: timestamp('started_at', { withTimezone: true }),
     finishedAt: timestamp('finished_at', { withTimezone: true }),
@@ -95,7 +101,7 @@ export const indexingJobs = pgTable(
   (table) => [
     check(
       'indexing_jobs_status_check',
-      sql`${table.status} IN ('queued','running','succeeded','failed','canceled')`,
+      sql`${table.status} IN ('queued','running','succeeded','failed','canceled','paused')`,
     ),
     check(
       'indexing_jobs_phase_check',
@@ -104,7 +110,7 @@ export const indexingJobs = pgTable(
     index('indexing_jobs_status_created_idx').on(table.status, table.createdAt),
     uniqueIndex('one_active_job_per_project')
       .on(table.projectId)
-      .where(sql`${table.status} IN ('queued','running')`),
+      .where(sql`${table.status} IN ('queued','running','paused')`),
   ],
 );
 

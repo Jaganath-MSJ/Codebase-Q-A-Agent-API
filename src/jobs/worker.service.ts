@@ -1,7 +1,8 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { JobsRepository } from '../db/repositories/jobs.repository';
-import { IndexingService } from '../indexing/indexing.service';
+import { IndexCanceledError, IndexingService } from '../indexing/indexing.service';
 import { ProgressReporter } from '../indexing/progress.reporter';
+import { EmbeddingQuotaExhaustedError } from '../indexing/rate-limiter';
 import { EventBusService } from '../events/event-bus.service';
 import type { IndexingJobRow } from '../db/schema';
 
@@ -47,7 +48,12 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
       await this.jobsRepository.failExceededAttempts();
       let job = await this.jobsRepository.claimNext();
       while (job) {
-        await this.runJob(job);
+        const outcome = await this.runJob(job);
+        // The daily embedding quota is global, not per-job — if this job just
+        // paused on it, every other job needing embedding would hit the same
+        // wall immediately. Stop draining for now; the 60s safety poll (or a
+        // fresh job.created) will try again later rather than hot-looping.
+        if (outcome === 'paused') break;
         job = await this.jobsRepository.claimNext();
       }
     } finally {
@@ -55,29 +61,52 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async runJob(job: IndexingJobRow): Promise<void> {
+  private async runJob(job: IndexingJobRow): Promise<'done' | 'paused'> {
     const heartbeat = setInterval(() => void this.jobsRepository.heartbeat(job.id), HEARTBEAT_MS);
+    let outcome: 'done' | 'paused' = 'done';
     try {
-      await this.indexingService.indexProject(job.projectId, this.progressReporter.forJob(job));
+      await this.indexingService.indexProject(
+        job.projectId,
+        this.progressReporter.forJob(job),
+        () => this.jobsRepository.isCancelRequested(job.id),
+      );
       await this.jobsRepository.markSucceeded(job.id);
     } catch (err) {
-      const rawMessage = err instanceof Error ? err.message : String(err);
-      // Postgres text columns can never store a NUL byte; strip it so a failure this
-      // ugly (e.g. a source file with an embedded NUL) can still be recorded, not just logged.
-      const message = rawMessage.split(NUL_BYTE).join('');
-      this.logger.error(`Job ${job.id} for project ${job.projectId} failed: ${message}`);
-      try {
-        await this.jobsRepository.markFailed(job.id, message);
-      } catch (markErr) {
-        this.logger.error(
-          `Job ${job.id} failed and recording that failure also failed: ${
-            markErr instanceof Error ? markErr.message : String(markErr)
-          }`,
-        );
-      }
+      outcome = await this.recordFailure(job, err);
     } finally {
       clearInterval(heartbeat);
     }
     this.eventBus.emit({ type: 'job.completed', projectId: job.projectId, jobId: job.id });
+    return outcome;
+  }
+
+  private async recordFailure(job: IndexingJobRow, err: unknown): Promise<'done' | 'paused'> {
+    if (err instanceof IndexCanceledError) {
+      this.logger.log(`Job ${job.id} for project ${job.projectId} canceled: ${err.message}`);
+      await this.jobsRepository.markCanceled(job.id);
+      return 'done';
+    }
+
+    if (err instanceof EmbeddingQuotaExhaustedError) {
+      this.logger.warn(`Job ${job.id} for project ${job.projectId} paused: ${err.message}`);
+      await this.jobsRepository.markPaused(job.id, err.message);
+      return 'paused';
+    }
+
+    const rawMessage = err instanceof Error ? err.message : String(err);
+    // Postgres text columns can never store a NUL byte; strip it so a failure this
+    // ugly (e.g. a source file with an embedded NUL) can still be recorded, not just logged.
+    const message = rawMessage.split(NUL_BYTE).join('');
+    this.logger.error(`Job ${job.id} for project ${job.projectId} failed: ${message}`);
+    try {
+      await this.jobsRepository.markFailed(job.id, message);
+    } catch (markErr) {
+      this.logger.error(
+        `Job ${job.id} failed and recording that failure also failed: ${
+          markErr instanceof Error ? markErr.message : String(markErr)
+        }`,
+      );
+    }
+    return 'done';
   }
 }

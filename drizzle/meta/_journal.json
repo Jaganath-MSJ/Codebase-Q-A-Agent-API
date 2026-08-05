@@ -43,6 +43,13 @@
       "when": 1785807805505,
       "tag": "0005_lease_and_attempt",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785893968384,
+      "tag": "0006_selective_filtering",
+      "breakpoints": true
     }
   ]
 }
