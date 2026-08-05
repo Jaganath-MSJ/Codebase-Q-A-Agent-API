@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, count, eq, isNull } from 'drizzle-orm';
 import type { Db } from '../pool';
 import { DB_TOKEN } from '../tokens';
 import { chunks, ChunkRow, NewChunkRow } from '../schema';
@@ -27,5 +27,13 @@ export class ChunksRepository {
 
   async setEmbedding(id: string, embedding: number[]): Promise<void> {
     await this.db.update(chunks).set({ embedding }).where(eq(chunks.id, id));
+  }
+
+  async countByProjectId(projectId: string): Promise<number> {
+    const [row] = await this.db
+      .select({ value: count() })
+      .from(chunks)
+      .where(eq(chunks.projectId, projectId));
+    return row?.value ?? 0;
   }
 }

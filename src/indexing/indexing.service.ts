@@ -54,39 +54,41 @@ export class IndexingService {
     await onProgress?.({ phase: 'walking' });
     const walked = await this.walkerService.walk(project.sourceRef);
 
-    await this.filesRepository.deleteByProjectId(projectId);
+    const existing = await this.filesRepository.findAllByProjectId(projectId);
+    const existingByPath = new Map(existing.map((file) => [file.path, file]));
+    const walkedPaths = new Set(walked.map((entry) => entry.relPath));
 
-    let chunkCount = 0;
+    const staleIds = existing.filter((file) => !walkedPaths.has(file.path)).map((file) => file.id);
+    await this.filesRepository.deleteByIds(staleIds);
+
     let filesDone = 0;
     await onProgress?.({ phase: 'chunking', filesDone, filesTotal: walked.length });
 
     for (const entry of walked) {
       const { text, lines } = await readSourceFile(entry.absPath);
+      const contentHash = sha256(text);
+      const existingFile = existingByPath.get(entry.relPath);
 
-      const [fileRow] = await this.filesRepository.insertMany([
-        {
+      // Unchanged since the last index: leave its files/chunks row untouched,
+      // including any embedding it already has — this is what makes a
+      // re-index of an unchanged repo skip chunking AND embedding entirely.
+      if (!existingFile || existingFile.contentHash !== contentHash) {
+        const chunkList = this.chunker.chunk(lines);
+        const chunkRows: Omit<NewChunkRow, 'projectId' | 'fileId'>[] = chunkList.map((chunk) => ({
+          ord: chunk.ord,
+          startLine: chunk.startLine,
+          endLine: chunk.endLine,
+          content: chunk.content,
+          contentHash: sha256(chunk.content),
+        }));
+
+        await this.filesRepository.replaceFile(
           projectId,
-          path: entry.relPath,
-          lang: langFromPath(entry.relPath),
-          contentHash: sha256(text),
-          lineCount: lines.length,
-        },
-      ]);
-      if (!fileRow) throw new Error(`Failed to insert file row for ${entry.relPath}`);
-
-      const chunks = this.chunker.chunk(lines);
-      const chunkRows: NewChunkRow[] = chunks.map((chunk) => ({
-        projectId,
-        fileId: fileRow.id,
-        ord: chunk.ord,
-        startLine: chunk.startLine,
-        endLine: chunk.endLine,
-        content: chunk.content,
-        contentHash: sha256(chunk.content),
-      }));
-
-      await this.chunksRepository.insertMany(chunkRows);
-      chunkCount += chunkRows.length;
+          existingFile?.id,
+          { path: entry.relPath, lang: langFromPath(entry.relPath), contentHash, lineCount: lines.length },
+          chunkRows,
+        );
+      }
 
       filesDone++;
       await onProgress?.({
@@ -97,6 +99,7 @@ export class IndexingService {
       });
     }
 
+    const chunkCount = await this.chunksRepository.countByProjectId(projectId);
     await this.projectsRepository.update(projectId, {
       status: 'indexed',
       fileCount: walked.length,

@@ -21,6 +21,9 @@ export class JobDto {
   trigger!: string;
 
   @ApiProperty()
+  attempt!: number;
+
+  @ApiProperty()
   filesTotal!: number;
 
   @ApiProperty()

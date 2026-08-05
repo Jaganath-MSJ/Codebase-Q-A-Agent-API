@@ -36,6 +36,13 @@
       "when": 1785776134940,
       "tag": "0004_honest_progress",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785807805505,
+      "tag": "0005_lease_and_attempt",
+      "breakpoints": true
     }
   ]
 }

@@ -11,6 +11,7 @@ export function toJobDto(row: IndexingJobRow): JobDto {
     status: row.status,
     phase: row.phase,
     trigger: row.trigger,
+    attempt: row.attempt,
     filesTotal: row.filesTotal,
     filesDone: row.filesDone,
     chunksTotal: row.chunksTotal,

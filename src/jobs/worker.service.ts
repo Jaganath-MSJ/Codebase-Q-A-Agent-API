@@ -6,6 +6,7 @@ import { EventBusService } from '../events/event-bus.service';
 import type { IndexingJobRow } from '../db/schema';
 
 const SAFETY_POLL_MS = 60_000;
+const HEARTBEAT_MS = 30_000;
 const NUL_BYTE = String.fromCharCode(0);
 
 /**
@@ -43,6 +44,7 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
     if (this.draining) return;
     this.draining = true;
     try {
+      await this.jobsRepository.failExceededAttempts();
       let job = await this.jobsRepository.claimNext();
       while (job) {
         await this.runJob(job);
@@ -54,6 +56,7 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async runJob(job: IndexingJobRow): Promise<void> {
+    const heartbeat = setInterval(() => void this.jobsRepository.heartbeat(job.id), HEARTBEAT_MS);
     try {
       await this.indexingService.indexProject(job.projectId, this.progressReporter.forJob(job));
       await this.jobsRepository.markSucceeded(job.id);
@@ -72,6 +75,8 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
           }`,
         );
       }
+    } finally {
+      clearInterval(heartbeat);
     }
     this.eventBus.emit({ type: 'job.completed', projectId: job.projectId, jobId: job.id });
   }
