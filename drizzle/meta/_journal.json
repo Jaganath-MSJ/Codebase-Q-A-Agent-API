@@ -50,6 +50,13 @@
       "when": 1785893968384,
       "tag": "0006_selective_filtering",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785979565471,
+      "tag": "0007_conversations_and_messages",
+      "breakpoints": true
     }
   ]
 }

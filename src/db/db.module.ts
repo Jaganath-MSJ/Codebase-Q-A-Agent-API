@@ -8,6 +8,8 @@ import { ProjectsRepository } from './repositories/projects.repository';
 import { FilesRepository } from './repositories/files.repository';
 import { ChunksRepository } from './repositories/chunks.repository';
 import { JobsRepository } from './repositories/jobs.repository';
+import { ConversationsRepository } from './repositories/conversations.repository';
+import { MessagesRepository } from './repositories/messages.repository';
 import { DB_TOKEN, PG_POOL_TOKEN } from './tokens';
 
 @Global()
@@ -27,8 +29,18 @@ import { DB_TOKEN, PG_POOL_TOKEN } from './tokens';
     FilesRepository,
     ChunksRepository,
     JobsRepository,
+    ConversationsRepository,
+    MessagesRepository,
   ],
-  exports: [DB_TOKEN, ProjectsRepository, FilesRepository, ChunksRepository, JobsRepository],
+  exports: [
+    DB_TOKEN,
+    ProjectsRepository,
+    FilesRepository,
+    ChunksRepository,
+    JobsRepository,
+    ConversationsRepository,
+    MessagesRepository,
+  ],
 })
 export class DbModule implements OnModuleInit {
   constructor(@Inject(DB_TOKEN) private readonly db: Db) {}

@@ -116,3 +116,36 @@ export const indexingJobs = pgTable(
 
 export type IndexingJobRow = typeof indexingJobs.$inferSelect;
 export type NewIndexingJobRow = typeof indexingJobs.$inferInsert;
+
+export const conversations = pgTable('conversations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id')
+    .notNull()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  title: text('title'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type ConversationRow = typeof conversations.$inferSelect;
+export type NewConversationRow = typeof conversations.$inferInsert;
+
+export const messages = pgTable(
+  'messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    role: text('role').notNull(),
+    content: text('content').notNull().default(''),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check('messages_role_check', sql`${table.role} IN ('user','assistant')`),
+    index('messages_conversation_created_idx').on(table.conversationId, table.createdAt),
+  ],
+);
+
+export type MessageRow = typeof messages.$inferSelect;
+export type NewMessageRow = typeof messages.$inferInsert;
