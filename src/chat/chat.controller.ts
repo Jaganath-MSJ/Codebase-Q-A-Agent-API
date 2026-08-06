@@ -1,12 +1,8 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { ChatService } from './chat.service';
-import {
-  ConversationDto,
-  MessageDto,
-  PostMessageDto,
-  PostMessageResponseDto,
-} from '../contracts';
+import { ConversationDto, MessageDto, PostMessageDto } from '../contracts';
 import type { ConversationRow, MessageRow } from '../db/schema';
 
 export function toConversationDto(row: ConversationRow): ConversationDto {
@@ -25,6 +21,8 @@ export function toMessageDto(row: MessageRow): MessageDto {
     conversationId: row.conversationId,
     role: row.role as 'user' | 'assistant',
     content: row.content,
+    status: row.status as 'pending' | 'streaming' | 'complete' | 'error',
+    error: row.error,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -56,17 +54,42 @@ export class ChatController {
     return rows.map(toMessageDto);
   }
 
+  /**
+   * `text/event-stream`, not a typed JSON body — see the event sequence in
+   * docs/phases/phase-3-conversation.md. Headers are only written once the
+   * conversation is confirmed to exist, so a bad id still gets a normal JSON
+   * 404 from Nest's exception filter instead of a malformed stream.
+   */
   @Post('conversations/:id/messages')
-  @ApiOkResponse({ type: PostMessageResponseDto })
+  @ApiOkResponse({ description: 'text/event-stream: message_created, status, token, done, error' })
   async postMessage(
     @Param('id') id: string,
     @Body() dto: PostMessageDto,
-  ): Promise<PostMessageResponseDto> {
-    const result = await this.chatService.postMessage(id, dto.question);
-    return {
-      userMessage: toMessageDto(result.userMessage),
-      assistantMessage: toMessageDto(result.assistantMessage),
-      citations: result.citations,
+    @Res() res: Response,
+  ): Promise<void> {
+    const abortController = new AbortController();
+    res.on('close', () => abortController.abort());
+
+    const events = this.chatService.streamMessage(id, dto.question, abortController.signal);
+    const first = await events.next();
+
+    res.writeHead(HttpStatus.OK, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.flushHeaders();
+
+    const write = (event: { type: string; data: unknown }) => {
+      res.write(`event: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`);
     };
+
+    if (!first.done) write(first.value);
+    for await (const event of events) {
+      write(event);
+    }
+
+    res.end();
   }
 }

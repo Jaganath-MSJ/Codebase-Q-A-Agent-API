@@ -1,6 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsString } from 'class-validator';
-import { CitationDto } from './chat.dto';
 
 export class ConversationDto {
   @ApiProperty()
@@ -32,6 +31,12 @@ export class MessageDto {
   @ApiProperty()
   content!: string;
 
+  @ApiProperty({ enum: ['pending', 'streaming', 'complete', 'error'] })
+  status!: 'pending' | 'streaming' | 'complete' | 'error';
+
+  @ApiProperty({ nullable: true, type: String })
+  error!: string | null;
+
   @ApiProperty()
   createdAt!: string;
 }
@@ -41,15 +46,4 @@ export class PostMessageDto {
   @IsString()
   @IsNotEmpty()
   question!: string;
-}
-
-export class PostMessageResponseDto {
-  @ApiProperty({ type: MessageDto })
-  userMessage!: MessageDto;
-
-  @ApiProperty({ type: MessageDto })
-  assistantMessage!: MessageDto;
-
-  @ApiProperty({ type: CitationDto, isArray: true })
-  citations!: CitationDto[];
 }

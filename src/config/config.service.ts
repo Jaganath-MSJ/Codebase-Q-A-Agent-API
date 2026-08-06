@@ -15,6 +15,10 @@ export class ConfigService {
     return this.env.GOOGLE_API_KEY;
   }
 
+  get groqApiKey(): string {
+    return this.env.GROQ_API_KEY;
+  }
+
   get embeddingProvider(): Env['EMBEDDING_PROVIDER'] {
     return this.env.EMBEDDING_PROVIDER;
   }

@@ -139,10 +139,21 @@ export const messages = pgTable(
       .references(() => conversations.id, { onDelete: 'cascade' }),
     role: text('role').notNull(),
     content: text('content').notNull().default(''),
+    status: text('status').notNull().default('complete'),
+    provider: text('provider'),
+    model: text('model'),
+    inputTokens: integer('input_tokens'),
+    outputTokens: integer('output_tokens'),
+    latencyMs: integer('latency_ms'),
+    error: text('error'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     check('messages_role_check', sql`${table.role} IN ('user','assistant')`),
+    check(
+      'messages_status_check',
+      sql`${table.status} IN ('pending','streaming','complete','error')`,
+    ),
     index('messages_conversation_created_idx').on(table.conversationId, table.createdAt),
   ],
 );

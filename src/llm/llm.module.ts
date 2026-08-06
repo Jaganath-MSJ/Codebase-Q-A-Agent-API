@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import * as path from 'node:path';
 import { ConfigService } from '../config/config.service';
 import { GeminiChatProvider } from './providers/gemini.provider';
+import { GroqChatProvider } from './providers/groq.provider';
 import { CachingChatProvider } from './cache';
 import type { ChatProvider } from './chat-provider.interface';
 
@@ -10,17 +11,18 @@ export const CHAT_PROVIDER_TOKEN = Symbol('CHAT_PROVIDER');
 @Module({
   providers: [
     GeminiChatProvider,
+    GroqChatProvider,
     {
       provide: CHAT_PROVIDER_TOKEN,
-      inject: [ConfigService, GeminiChatProvider],
-      useFactory: (config: ConfigService, gemini: GeminiChatProvider): ChatProvider => {
-        if (config.chatProvider !== 'gemini') {
-          throw new Error(
-            `Chat provider '${config.chatProvider}' is not implemented yet — Phase 1 only supports 'gemini'.`,
-          );
-        }
-        if (!config.llmCacheEnabled) return gemini;
-        return new CachingChatProvider(gemini, path.join(config.dataDir, 'cache', 'llm'));
+      inject: [ConfigService, GeminiChatProvider, GroqChatProvider],
+      useFactory: (
+        config: ConfigService,
+        gemini: GeminiChatProvider,
+        groq: GroqChatProvider,
+      ): ChatProvider => {
+        const inner = config.chatProvider === 'groq' ? groq : gemini;
+        if (!config.llmCacheEnabled) return inner;
+        return new CachingChatProvider(inner, path.join(config.dataDir, 'cache', 'llm'));
       },
     },
   ],
