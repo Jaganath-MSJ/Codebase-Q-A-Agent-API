@@ -1,9 +1,9 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiCreatedResponse, ApiAcceptedResponse, ApiTags } from '@nestjs/swagger';
 import { ProjectsService } from './projects.service';
 import { JobsService } from '../jobs/jobs.service';
 import { toJobDto } from '../jobs/jobs.controller';
-import { CreateProjectDto, ProjectDto, JobDto } from '../contracts';
+import { CreateProjectDto, ProjectDto, JobDto, FileQueryDto, FileViewDto } from '../contracts';
 import { ProjectRow } from '../db/schema';
 
 function toDto(row: ProjectRow): ProjectDto {
@@ -48,5 +48,17 @@ export class ProjectsController {
   async index(@Param('id') id: string): Promise<JobDto> {
     const job = await this.jobsService.enqueue(id);
     return toJobDto(job);
+  }
+
+  @Get(':id/file')
+  @ApiOkResponse({ type: FileViewDto })
+  async getFile(@Param('id') id: string, @Query() query: FileQueryDto): Promise<FileViewDto> {
+    return this.projectsService.getFile(
+      id,
+      query.path,
+      query.startLine,
+      query.endLine,
+      query.context ?? 20,
+    );
   }
 }
