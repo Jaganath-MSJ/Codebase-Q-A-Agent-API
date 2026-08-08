@@ -124,6 +124,11 @@ export const conversations = pgTable('conversations', {
     .notNull()
     .references(() => projects.id, { onDelete: 'cascade' }),
   title: text('title'),
+  // Rolling summary of every exchange older than the fixed recent window —
+  // updated incrementally, so `summarizedThroughMsgId` marks the last
+  // assistant message already folded in and never needs re-summarizing.
+  summary: text('summary'),
+  summarizedThroughMsgId: uuid('summarized_through_msg_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -141,6 +146,10 @@ export const messages = pgTable(
     role: text('role').notNull(),
     content: text('content').notNull().default(''),
     status: text('status').notNull().default('complete'),
+    // The CONDENSED standalone query actually searched — set on every
+    // assistant message (even the first turn, where it just echoes the
+    // original question), so this row always shows what retrieval saw.
+    retrievalQuery: text('retrieval_query'),
     provider: text('provider'),
     model: text('model'),
     inputTokens: integer('input_tokens'),

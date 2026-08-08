@@ -21,6 +21,13 @@ export class MessagesRepository {
    * Inserts the user's question and a placeholder assistant row atomically —
    * never one without the other. The assistant row starts as 'pending' so it
    * exists (and is visible on a reload) before generation has even started.
+   *
+   * The assistant's `createdAt` is set explicitly, one millisecond after the
+   * user row's actual timestamp: Postgres's `now()` is frozen for the whole
+   * transaction, so both inserts would otherwise get the *identical*
+   * timestamp, and `findAllByConversation`'s `ORDER BY created_at` (with no
+   * secondary key) would then sort them in unspecified order — silently
+   * breaking `toExchanges`'s assumption that every pair is user-then-assistant.
    */
   async createTurn(
     conversationId: string,
@@ -31,17 +38,31 @@ export class MessagesRepository {
         .insert(messages)
         .values({ conversationId, role: 'user', content: userContent, status: 'complete' })
         .returning();
+      if (!userMessage) throw new Error('Insert returned no row');
+
       const [assistantMessage] = await tx
         .insert(messages)
-        .values({ conversationId, role: 'assistant', content: '', status: 'pending' })
+        .values({
+          conversationId,
+          role: 'assistant',
+          content: '',
+          status: 'pending',
+          createdAt: new Date(userMessage.createdAt.getTime() + 1),
+        })
         .returning();
-      if (!userMessage || !assistantMessage) throw new Error('Insert returned no row');
+      if (!assistantMessage) throw new Error('Insert returned no row');
+
       return { userMessage, assistantMessage };
     });
   }
 
   async markStreaming(id: string): Promise<void> {
     await this.db.update(messages).set({ status: 'streaming' }).where(eq(messages.id, id));
+  }
+
+  /** The condensed standalone query actually searched — set on every turn, even an uncondensed first one. */
+  async setRetrievalQuery(id: string, retrievalQuery: string): Promise<void> {
+    await this.db.update(messages).set({ retrievalQuery }).where(eq(messages.id, id));
   }
 
   /** Periodic flush of the in-progress answer, so a dropped connection leaves a partial row, not nothing. */

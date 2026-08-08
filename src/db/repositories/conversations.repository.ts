@@ -34,4 +34,12 @@ export class ConversationsRepository {
   async setTitle(id: string, title: string): Promise<void> {
     await this.db.update(conversations).set({ title }).where(eq(conversations.id, id));
   }
+
+  /** Folds newly-evicted exchanges into the rolling summary and advances the high-water mark. */
+  async updateSummary(id: string, summary: string, summarizedThroughMsgId: string): Promise<void> {
+    await this.db
+      .update(conversations)
+      .set({ summary, summarizedThroughMsgId })
+      .where(eq(conversations.id, id));
+  }
 }

@@ -7,12 +7,16 @@ import { CitationsRepository } from '../db/repositories/citations.repository';
 import type { ConversationRow, MessageRow, CitationRow, NewCitationRow } from '../db/schema';
 import { CHAT_PROVIDER_TOKEN } from '../llm/llm.module';
 import type { ChatProvider, ChatUsage } from '../llm/chat-provider.interface';
-import { buildUserPrompt, SYSTEM_PROMPT, type EvidenceBlock } from './prompt.builder';
+import { buildCondensationPrompt, buildSummaryPrompt, buildUserPrompt, SYSTEM_PROMPT, type EvidenceBlock } from './prompt.builder';
 import { parseCitations, type Citation } from './citation.parser';
+import { evictedExchanges, recentWindow, toExchanges, truncateAnswer, type Exchange } from './conversation-context';
 
 const TOP_K = 10;
 const TITLE_MAX_LENGTH = 80;
 const FLUSH_INTERVAL_MS = 400;
+const CONDENSATION_WINDOW = 2;
+const GENERATION_WINDOW = 3;
+const SUMMARY_TRIGGER_EXCHANGES = 6;
 
 export interface SourceRef {
   marker: number;
@@ -28,7 +32,7 @@ export interface MessageWithCitations extends MessageRow {
 
 export type ChatSseEvent =
   | { type: 'message_created'; data: { userMessageId: string; assistantMessageId: string } }
-  | { type: 'status'; data: { stage: 'retrieving' | 'generating' } }
+  | { type: 'status'; data: { stage: 'condensing' | 'retrieving' | 'generating' } }
   | { type: 'sources'; data: { sources: SourceRef[] } }
   | { type: 'token'; data: { delta: string } }
   | {
@@ -98,8 +102,29 @@ export class ChatService {
 
     let buffer = '';
     try {
+      // The pair just inserted is always the newest two rows — everything
+      // before them is prior turns to condense/summarize against. Only a
+      // successfully completed turn is trustworthy context.
+      const allMessages = await this.messagesRepository.findAllByConversation(conversationId);
+      const priorExchanges = toExchanges(allMessages.slice(0, -2)).filter(
+        (ex) => ex.answerStatus === 'complete',
+      );
+
+      let retrievalQuery = question;
+      if (priorExchanges.length > 0) {
+        yield { type: 'status', data: { stage: 'condensing' } };
+        const condensationWindow = recentWindow(priorExchanges, CONDENSATION_WINDOW).map(
+          toPromptExchange,
+        );
+        const { system, user } = buildCondensationPrompt(condensationWindow, question);
+        const condensed = await this.chatProvider.complete({ system, user }, signal);
+        if (signal.aborted) return;
+        if (condensed.text.trim()) retrievalQuery = condensed.text.trim();
+      }
+      await this.messagesRepository.setRetrievalQuery(assistantMessage.id, retrievalQuery);
+
       yield { type: 'status', data: { stage: 'retrieving' } };
-      const scoredChunks = await this.retrievalService.search(conversation.projectId, question, TOP_K);
+      const scoredChunks = await this.retrievalService.search(conversation.projectId, retrievalQuery, TOP_K);
       if (signal.aborted) return;
 
       const evidence: EvidenceBlock[] = scoredChunks.map((chunk) => ({
@@ -108,7 +133,6 @@ export class ChatService {
         endLine: chunk.endLine,
         content: chunk.content,
       }));
-      const user = buildUserPrompt(evidence, question);
 
       // Emitted before the first token so `[1]` becomes a live chip the
       // instant it streams in, and so a slow first token has something to
@@ -126,6 +150,14 @@ export class ChatService {
           })),
         },
       };
+
+      // The model is shown the ORIGINAL question here, never the condensed
+      // one — condensation is for retrieval only, and reads robotic otherwise.
+      const generationWindow = recentWindow(priorExchanges, GENERATION_WINDOW).map(toPromptExchange);
+      const user = buildUserPrompt(evidence, question, {
+        summary: conversation.summary,
+        recentExchanges: generationWindow,
+      });
 
       yield { type: 'status', data: { stage: 'generating' } };
       await this.messagesRepository.markStreaming(assistantMessage.id);
@@ -194,8 +226,20 @@ export class ChatService {
           await this.conversationsRepository.setTitle(conversationId, question.slice(0, TITLE_MAX_LENGTH));
         }
         await this.conversationsRepository.touch(conversationId);
+        await this.maybeUpdateSummary(
+          conversation,
+          priorExchanges,
+          {
+            userMessageId: userMessage.id,
+            assistantMessageId: assistantMessage.id,
+            question,
+            answer: buffer,
+            answerStatus: 'complete',
+          },
+          signal,
+        );
       } catch {
-        // ignore — title/updatedAt are cosmetic, not correctness-critical
+        // ignore — title/updatedAt/summary are cosmetic, not correctness-critical
       }
     } catch (err) {
       if (signal.aborted) {
@@ -208,9 +252,48 @@ export class ChatService {
     }
   }
 
+  /**
+   * Once a conversation passes six exchanges, folds everything that just
+   * fell out of the fixed recent window into `conversations.summary` — only
+   * the newly-evicted turns, against the existing summary, never a full
+   * re-summarization.
+   */
+  private async maybeUpdateSummary(
+    conversation: ConversationRow,
+    priorExchanges: Exchange[],
+    currentExchange: Exchange,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const allExchanges = [...priorExchanges, currentExchange];
+    if (allExchanges.length <= SUMMARY_TRIGGER_EXCHANGES) return;
+
+    const evicted = evictedExchanges(
+      allExchanges,
+      GENERATION_WINDOW,
+      conversation.summarizedThroughMsgId,
+    );
+    if (evicted.length === 0) return;
+
+    const { system, user } = buildSummaryPrompt(conversation.summary, evicted.map(toPromptExchange));
+    const summarized = await this.chatProvider.complete({ system, user }, signal);
+    const newSummary = summarized.text.trim();
+    if (!newSummary) return;
+
+    const lastEvicted = evicted[evicted.length - 1]!;
+    await this.conversationsRepository.updateSummary(
+      conversation.id,
+      newSummary,
+      lastEvicted.assistantMessageId,
+    );
+  }
+
   private async requireConversation(id: string): Promise<ConversationRow> {
     const conversation = await this.conversationsRepository.findById(id);
     if (!conversation) throw new NotFoundException(`Conversation ${id} not found`);
     return conversation;
   }
+}
+
+function toPromptExchange(exchange: Exchange): { question: string; answer: string } {
+  return { question: exchange.question, answer: truncateAnswer(exchange.answer) };
 }

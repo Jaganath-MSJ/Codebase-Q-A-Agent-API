@@ -76,4 +76,37 @@ describe('parseCitations', () => {
       { marker: 1, path: 'src/auth.service.ts', startLine: 1, endLine: 34, content: evidence[0]!.content },
     ]);
   });
+
+  // Some models substitute their own trained-in citation style no matter how
+  // the prompt is worded — observed live from Groq's openai/gpt-oss-120b.
+  it('also recognizes the 【n】 citation style some models substitute for [n]', () => {
+    const citations = parseCitations('Auth lives in 【1】.', evidence);
+    expect(citations).toEqual([
+      { marker: 1, path: 'src/auth.service.ts', startLine: 1, endLine: 34, content: evidence[0]!.content },
+    ]);
+  });
+
+  it('recognizes 【n†...】 (with a trailing line-range annotation) too', () => {
+    const citations = parseCitations('Auth lives in 【1†L9-L15】.', evidence);
+    expect(citations).toEqual([
+      { marker: 1, path: 'src/auth.service.ts', startLine: 1, endLine: 34, content: evidence[0]!.content },
+    ]);
+  });
+
+  it('ignores a 【n】 marker inside a fenced code block, same as [n]', () => {
+    const citations = parseCitations('Here:\n```\narr【1】 = 2;\n```\nNo real citation.', evidence);
+    expect(citations).toEqual([]);
+  });
+
+  it('dedupes and range-checks 【n】 the same way as [n]', () => {
+    const citations = parseCitations('【1】 and 【1】 again, but not 【99】.', evidence);
+    expect(citations).toEqual([
+      { marker: 1, path: 'src/auth.service.ts', startLine: 1, endLine: 34, content: evidence[0]!.content },
+    ]);
+  });
+
+  it('preserves in-text order across mixed [n] and 【n】 markers', () => {
+    const citations = parseCitations('First 【2】, then [1].', evidence);
+    expect(citations.map((c) => c.marker)).toEqual([2, 1]);
+  });
 });
