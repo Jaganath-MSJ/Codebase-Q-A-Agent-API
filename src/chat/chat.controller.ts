@@ -1,9 +1,9 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
-import { ChatService } from './chat.service';
-import { ConversationDto, MessageDto, PostMessageDto } from '../contracts';
-import type { ConversationRow, MessageRow } from '../db/schema';
+import { ChatService, type MessageWithCitations } from './chat.service';
+import { CitationDto, ConversationDto, MessageDto, PostMessageDto } from '../contracts';
+import type { ConversationRow, CitationRow } from '../db/schema';
 
 export function toConversationDto(row: ConversationRow): ConversationDto {
   return {
@@ -15,7 +15,19 @@ export function toConversationDto(row: ConversationRow): ConversationDto {
   };
 }
 
-export function toMessageDto(row: MessageRow): MessageDto {
+function toCitationDto(row: CitationRow): CitationDto {
+  return {
+    marker: row.marker,
+    path: row.filePath,
+    startLine: row.startLine,
+    endLine: row.endLine,
+    score: row.score,
+    retrievalRank: row.retrievalRank,
+    used: row.used,
+  };
+}
+
+export function toMessageDto(row: MessageWithCitations): MessageDto {
   return {
     id: row.id,
     conversationId: row.conversationId,
@@ -23,6 +35,7 @@ export function toMessageDto(row: MessageRow): MessageDto {
     content: row.content,
     status: row.status as 'pending' | 'streaming' | 'complete' | 'error',
     error: row.error,
+    citations: row.citations.map(toCitationDto),
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -61,7 +74,9 @@ export class ChatController {
    * 404 from Nest's exception filter instead of a malformed stream.
    */
   @Post('conversations/:id/messages')
-  @ApiOkResponse({ description: 'text/event-stream: message_created, status, token, done, error' })
+  @ApiOkResponse({
+    description: 'text/event-stream: message_created, status, sources, token, done, error',
+  })
   async postMessage(
     @Param('id') id: string,
     @Body() dto: PostMessageDto,

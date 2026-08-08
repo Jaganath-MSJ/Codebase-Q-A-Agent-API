@@ -3,6 +3,7 @@ import {
   uuid,
   text,
   integer,
+  real,
   timestamp,
   vector,
   unique,
@@ -160,3 +161,28 @@ export const messages = pgTable(
 
 export type MessageRow = typeof messages.$inferSelect;
 export type NewMessageRow = typeof messages.$inferInsert;
+
+export const citations = pgTable(
+  'citations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    messageId: uuid('message_id')
+      .notNull()
+      .references(() => messages.id, { onDelete: 'cascade' }),
+    marker: integer('marker').notNull(),
+    chunkId: uuid('chunk_id').references(() => chunks.id, { onDelete: 'set null' }),
+    // Denormalized snapshot: survives re-indexing, so old conversations keep
+    // readable citations even after the live chunk row is gone.
+    filePath: text('file_path').notNull(),
+    startLine: integer('start_line').notNull(),
+    endLine: integer('end_line').notNull(),
+    contentHash: text('content_hash'),
+    score: real('score'),
+    retrievalRank: integer('retrieval_rank'),
+    used: boolean('used').notNull().default(false),
+  },
+  (table) => [unique().on(table.messageId, table.marker)],
+);
+
+export type CitationRow = typeof citations.$inferSelect;
+export type NewCitationRow = typeof citations.$inferInsert;

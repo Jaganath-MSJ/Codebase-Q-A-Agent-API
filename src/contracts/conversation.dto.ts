@@ -18,6 +18,29 @@ export class ConversationDto {
   updatedAt!: string;
 }
 
+export class CitationDto {
+  @ApiProperty({ description: '1-based marker as it appears in the answer text, e.g. [1]' })
+  marker!: number;
+
+  @ApiProperty()
+  path!: string;
+
+  @ApiProperty()
+  startLine!: number;
+
+  @ApiProperty()
+  endLine!: number;
+
+  @ApiProperty({ nullable: true, type: Number })
+  score!: number | null;
+
+  @ApiProperty({ nullable: true, type: Number })
+  retrievalRank!: number | null;
+
+  @ApiProperty({ description: 'Whether the model actually cited this retrieved chunk' })
+  used!: boolean;
+}
+
 export class MessageDto {
   @ApiProperty()
   id!: string;
@@ -36,6 +59,9 @@ export class MessageDto {
 
   @ApiProperty({ nullable: true, type: String })
   error!: string | null;
+
+  @ApiProperty({ type: CitationDto, isArray: true, description: 'Every retrieved chunk, cited or not' })
+  citations!: CitationDto[];
 
   @ApiProperty()
   createdAt!: string;

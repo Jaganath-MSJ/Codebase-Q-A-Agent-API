@@ -10,6 +10,7 @@ import { ChunksRepository } from './repositories/chunks.repository';
 import { JobsRepository } from './repositories/jobs.repository';
 import { ConversationsRepository } from './repositories/conversations.repository';
 import { MessagesRepository } from './repositories/messages.repository';
+import { CitationsRepository } from './repositories/citations.repository';
 import { DB_TOKEN, PG_POOL_TOKEN } from './tokens';
 
 @Global()
@@ -31,6 +32,7 @@ import { DB_TOKEN, PG_POOL_TOKEN } from './tokens';
     JobsRepository,
     ConversationsRepository,
     MessagesRepository,
+    CitationsRepository,
   ],
   exports: [
     DB_TOKEN,
@@ -40,6 +42,7 @@ import { DB_TOKEN, PG_POOL_TOKEN } from './tokens';
     JobsRepository,
     ConversationsRepository,
     MessagesRepository,
+    CitationsRepository,
   ],
 })
 export class DbModule implements OnModuleInit {
