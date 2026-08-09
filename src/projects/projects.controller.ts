@@ -3,7 +3,7 @@ import { ApiOkResponse, ApiCreatedResponse, ApiAcceptedResponse, ApiTags } from 
 import { ProjectsService } from './projects.service';
 import { JobsService } from '../jobs/jobs.service';
 import { toJobDto } from '../jobs/jobs.controller';
-import { CreateProjectDto, ProjectDto, JobDto, FileQueryDto, FileViewDto } from '../contracts';
+import { CreateProjectDto, ProjectDto, JobDto, FileQueryDto, FileViewDto, IndexRequestDto } from '../contracts';
 import { ProjectRow } from '../db/schema';
 
 function toDto(row: ProjectRow): ProjectDto {
@@ -45,8 +45,8 @@ export class ProjectsController {
   @Post(':id/index')
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiAcceptedResponse({ type: JobDto })
-  async index(@Param('id') id: string): Promise<JobDto> {
-    const job = await this.jobsService.enqueue(id);
+  async index(@Param('id') id: string, @Body() body: IndexRequestDto): Promise<JobDto> {
+    const job = await this.jobsService.enqueue(id, body.force ? 'force' : 'initial');
     return toJobDto(job);
   }
 

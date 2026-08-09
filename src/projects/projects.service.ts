@@ -10,7 +10,12 @@ export class ProjectsService {
   constructor(private readonly projectsRepository: ProjectsRepository) {}
 
   async create(dto: CreateProjectDto): Promise<ProjectRow> {
-    return this.projectsRepository.create({ name: dto.name, sourceRef: dto.sourceRef });
+    return this.projectsRepository.create({
+      name: dto.name,
+      sourceKind: dto.sourceKind ?? 'local_path',
+      sourceRef: dto.sourceRef,
+      defaultBranch: dto.branch,
+    });
   }
 
   async findAll(): Promise<ProjectRow[]> {
@@ -32,9 +37,14 @@ export class ProjectsService {
     const project = await this.projectsRepository.findById(projectId);
     if (!project) throw new NotFoundException(`Project ${projectId} not found`);
 
+    // `workspacePath` is where the adapter actually put the files on disk —
+    // for git_url that's `data/workspaces/<id>`, not the clone URL in
+    // `sourceRef`. It's only null for a project that has never been indexed,
+    // which has no citations to view yet.
+    const root = project.workspacePath ?? project.sourceRef;
     let absPath: string;
     try {
-      absPath = resolveInside(project.sourceRef, relPath);
+      absPath = resolveInside(root, relPath);
     } catch {
       throw new BadRequestException(`Path escapes the project root: ${relPath}`);
     }

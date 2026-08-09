@@ -69,6 +69,7 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
         job.projectId,
         this.progressReporter.forJob(job),
         () => this.jobsRepository.isCancelRequested(job.id),
+        job.trigger === 'force',
       );
       await this.jobsRepository.markSucceeded(job.id);
     } catch (err) {

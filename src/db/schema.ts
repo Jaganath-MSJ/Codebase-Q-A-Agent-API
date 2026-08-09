@@ -15,18 +15,34 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
-export const projects = pgTable('projects', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  name: text('name').notNull(),
-  sourceKind: text('source_kind').notNull().default('local_path'),
-  sourceRef: text('source_ref').notNull(),
-  status: text('status').notNull().default('created'),
-  fileCount: integer('file_count').notNull().default(0),
-  chunkCount: integer('chunk_count').notNull().default(0),
-  embeddingModel: text('embedding_model'),
-  embeddingDim: integer('embedding_dim'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const projects = pgTable(
+  'projects',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    sourceKind: text('source_kind').notNull().default('local_path'),
+    sourceRef: text('source_ref').notNull(),
+    // Absolute path on disk the adapter last materialized into — the local
+    // folder itself for local_path, data/workspaces/<id> for a git clone.
+    workspacePath: text('workspace_path'),
+    defaultBranch: text('default_branch'),
+    // Git sha, or a content-tree hash for non-git sources — compared against
+    // the adapter's freshly materialized revision to skip a no-op re-index.
+    headRevision: text('head_revision'),
+    status: text('status').notNull().default('created'),
+    fileCount: integer('file_count').notNull().default(0),
+    chunkCount: integer('chunk_count').notNull().default(0),
+    embeddingModel: text('embedding_model'),
+    embeddingDim: integer('embedding_dim'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      'projects_source_kind_check',
+      sql`${table.sourceKind} IN ('local_path','git_url','zip_upload','git_private')`,
+    ),
+  ],
+);
 
 export type ProjectRow = typeof projects.$inferSelect;
 export type NewProjectRow = typeof projects.$inferInsert;

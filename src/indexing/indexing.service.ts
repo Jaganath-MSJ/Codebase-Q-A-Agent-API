@@ -61,13 +61,26 @@ export class IndexingService {
     projectId: string,
     onProgress?: OnIndexProgress,
     shouldCancel?: ShouldCancel,
+    force = false,
   ): Promise<ProjectRow> {
     const project = await this.projectsRepository.findById(projectId);
     if (!project) throw new NotFoundException(`Project ${projectId} not found`);
 
     await onProgress?.({ phase: 'walking' });
     const adapter = this.sourceAdapterRegistry.getAdapter(project.sourceKind);
-    const { workspacePath } = await adapter.materialize(project);
+    const { workspacePath, revision } = await adapter.materialize(project);
+    await this.projectsRepository.update(projectId, { workspacePath });
+
+    // Nothing on disk changed since the last successful index — skip the walk
+    // entirely rather than re-discovering that every file is unchanged one by
+    // one. `headRevision` is only null before a project's first index, which
+    // must never short-circuit.
+    if (!force && project.headRevision && revision === project.headRevision) {
+      await onProgress?.({ phase: 'finalizing' });
+      const unchanged = await this.projectsRepository.findById(projectId);
+      if (!unchanged) throw new NotFoundException(`Project ${projectId} not found`);
+      return unchanged;
+    }
 
     // `skipReasons` starts as the walker's tally (gitignored, binary, minified, ...)
     // and gains an `unchanged` entry below as content-hash diffing finds files that
@@ -145,6 +158,7 @@ export class IndexingService {
 
     const updated = await this.projectsRepository.update(projectId, {
       status: 'ready',
+      headRevision: revision,
       embeddingModel: this.embeddingProvider.id,
       embeddingDim: this.embeddingProvider.dimensions,
     });

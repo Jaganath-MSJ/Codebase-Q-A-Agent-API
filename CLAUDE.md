@@ -7,7 +7,7 @@ Full plan in `docs/`. Read `docs/PLAN.md` before non-trivial work, and the relev
 ## Non-negotiable invariants
 
 - **Embedding dimension is 768.** Permanently. Assert it at index time, and assert `project.embedding_model` matches the active provider before every retrieval.
-- **All paths in the DB and API are repo-relative with forward slashes.** Conversion to native separators happens only in `src/common/paths.ts`.
+- **All paths in the DB and API are repo-relative with forward slashes.** Conversion to native separators happens only in `src/common/paths.ts`. Exception: `projects.workspace_path` (and `source_ref` for `local_path`/`git_url` kinds) is a native, absolute machine path, not repo-relative content — it's never sent to the client via `ProjectDto`, only used server-side as the root that repo-relative paths resolve against.
 - **All source file reads go through `src/common/read-file.ts`**, which normalizes CRLF to LF once and returns a `lines` array. Every line number derives from it. Ranges are 1-based and inclusive.
 - **The LLM never writes a file path** — only `[n]` markers. Citations are built from server-side data; out-of-range markers are dropped.
 - **Local disk is free; Postgres is 0.5 GB.** Repos, model weights, and the embedding and LLM caches live under `data/`, gitignored.

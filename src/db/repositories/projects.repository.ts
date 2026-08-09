@@ -8,7 +8,9 @@ import { projects, ProjectRow, NewProjectRow } from '../schema';
 export class ProjectsRepository {
   constructor(@Inject(DB_TOKEN) private readonly db: Db) {}
 
-  async create(data: Pick<NewProjectRow, 'name' | 'sourceRef'>): Promise<ProjectRow> {
+  async create(
+    data: Pick<NewProjectRow, 'name' | 'sourceRef' | 'sourceKind' | 'defaultBranch'>,
+  ): Promise<ProjectRow> {
     const [row] = await this.db.insert(projects).values(data).returning();
     if (!row) throw new Error('Insert returned no row');
     return row;
@@ -26,7 +28,17 @@ export class ProjectsRepository {
   async update(
     id: string,
     data: Partial<
-      Pick<NewProjectRow, 'status' | 'fileCount' | 'chunkCount' | 'embeddingModel' | 'embeddingDim'>
+      Pick<
+        NewProjectRow,
+        | 'status'
+        | 'fileCount'
+        | 'chunkCount'
+        | 'embeddingModel'
+        | 'embeddingDim'
+        | 'workspacePath'
+        | 'defaultBranch'
+        | 'headRevision'
+      >
     >,
   ): Promise<ProjectRow | undefined> {
     const [row] = await this.db

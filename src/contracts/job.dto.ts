@@ -1,4 +1,15 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsBoolean, IsOptional } from 'class-validator';
+
+export class IndexRequestDto {
+  @ApiPropertyOptional({
+    description: 'Bypass the revision early-exit and re-walk even if nothing changed',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean;
+}
 
 export class JobDto {
   @ApiProperty()
