@@ -10,6 +10,7 @@ import { CHUNKER_TOKEN } from '../chunking/chunking.module';
 import type { Chunker } from '../chunking/chunker.interface';
 import { EMBEDDING_PROVIDER_TOKEN } from '../embeddings/embeddings.module';
 import type { EmbeddingProvider } from '../embeddings/embedding-provider.interface';
+import { SourceAdapterRegistry } from '../sources/source-adapter.registry';
 import { EmbeddingRateLimiter, withEmbeddingRetry } from './rate-limiter';
 import type { ProjectRow, NewChunkRow } from '../db/schema';
 
@@ -50,6 +51,7 @@ export class IndexingService {
     private readonly filesRepository: FilesRepository,
     private readonly chunksRepository: ChunksRepository,
     private readonly walkerService: WalkerService,
+    private readonly sourceAdapterRegistry: SourceAdapterRegistry,
     private readonly rateLimiter: EmbeddingRateLimiter,
     @Inject(CHUNKER_TOKEN) private readonly chunker: Chunker,
     @Inject(EMBEDDING_PROVIDER_TOKEN) private readonly embeddingProvider: EmbeddingProvider,
@@ -64,11 +66,14 @@ export class IndexingService {
     if (!project) throw new NotFoundException(`Project ${projectId} not found`);
 
     await onProgress?.({ phase: 'walking' });
+    const adapter = this.sourceAdapterRegistry.getAdapter(project.sourceKind);
+    const { workspacePath } = await adapter.materialize(project);
+
     // `skipReasons` starts as the walker's tally (gitignored, binary, minified, ...)
     // and gains an `unchanged` entry below as content-hash diffing finds files that
     // don't need re-chunking. Both are "skipped", just at different pipeline stages —
     // on a fully-unchanged re-index, `unchanged` dominates and filesSkipped ≈ filesTotal.
-    const walkResult = await this.walkerService.walk(project.sourceRef);
+    const walkResult = await this.walkerService.walk(workspacePath);
     const walked = walkResult.included;
     const skipReasons: Record<string, number> = { ...walkResult.skipReasons };
     const bumpSkipped = (reason: string): number => {
