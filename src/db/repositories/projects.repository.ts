@@ -38,6 +38,7 @@ export class ProjectsRepository {
         | 'workspacePath'
         | 'defaultBranch'
         | 'headRevision'
+        | 'overview'
       >
     >,
   ): Promise<ProjectRow | undefined> {

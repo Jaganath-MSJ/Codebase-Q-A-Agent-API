@@ -90,6 +90,7 @@ export class ChatService {
     signal: AbortSignal,
   ): AsyncGenerator<ChatSseEvent> {
     const conversation = await this.requireConversation(conversationId);
+    const project = await this.projectsRepository.findById(conversation.projectId);
     const { userMessage, assistantMessage } = await this.messagesRepository.createTurn(
       conversationId,
       question,
@@ -155,6 +156,7 @@ export class ChatService {
       // one — condensation is for retrieval only, and reads robotic otherwise.
       const generationWindow = recentWindow(priorExchanges, GENERATION_WINDOW).map(toPromptExchange);
       const user = buildUserPrompt(evidence, question, {
+        overview: project?.overview,
         summary: conversation.summary,
         recentExchanges: generationWindow,
       });

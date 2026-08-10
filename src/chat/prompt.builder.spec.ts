@@ -26,6 +26,21 @@ describe('buildUserPrompt', () => {
     expect(prompt).toContain('EARLIER IN THIS CONVERSATION');
     expect(prompt).not.toContain('RECENT TURNS');
   });
+
+  it('includes the project overview before conversation context, and omits it when absent', () => {
+    const withOverview = buildUserPrompt(evidence, 'what is a?', {
+      overview: 'tiny-repo — TypeScript. 3 files.',
+      summary: 'prior summary',
+      recentExchanges: [],
+    });
+    expect(withOverview).toContain('PROJECT OVERVIEW:\ntiny-repo — TypeScript. 3 files.');
+    expect(withOverview.indexOf('PROJECT OVERVIEW')).toBeLessThan(
+      withOverview.indexOf('EARLIER IN THIS CONVERSATION'),
+    );
+
+    const withoutOverview = buildUserPrompt(evidence, 'what is a?', { recentExchanges: [] });
+    expect(withoutOverview).not.toContain('PROJECT OVERVIEW');
+  });
 });
 
 describe('buildCondensationPrompt', () => {

@@ -11,6 +11,8 @@ import type { Chunker } from '../chunking/chunker.interface';
 import { EMBEDDING_PROVIDER_TOKEN } from '../embeddings/embeddings.module';
 import type { EmbeddingProvider } from '../embeddings/embedding-provider.interface';
 import { SourceAdapterRegistry } from '../sources/source-adapter.registry';
+import { RepoOverviewService } from '../overview/repo-overview.service';
+import type { OverviewFileEntry } from '../overview/overview-digest';
 import { EmbeddingRateLimiter, withEmbeddingRetry } from './rate-limiter';
 import type { ProjectRow, NewChunkRow } from '../db/schema';
 
@@ -52,6 +54,7 @@ export class IndexingService {
     private readonly chunksRepository: ChunksRepository,
     private readonly walkerService: WalkerService,
     private readonly sourceAdapterRegistry: SourceAdapterRegistry,
+    private readonly repoOverviewService: RepoOverviewService,
     private readonly rateLimiter: EmbeddingRateLimiter,
     @Inject(CHUNKER_TOKEN) private readonly chunker: Chunker,
     @Inject(EMBEDDING_PROVIDER_TOKEN) private readonly embeddingProvider: EmbeddingProvider,
@@ -156,11 +159,20 @@ export class IndexingService {
     await this.embedPendingChunks(projectId, onProgress, shouldCancel);
     await onProgress?.({ phase: 'finalizing' });
 
+    // Reuses the walk already done above rather than a third full tree scan —
+    // only package.json and the README get their own (single-file) reads.
+    const fileLangs: OverviewFileEntry[] = walked.map((entry) => ({
+      relPath: entry.relPath,
+      lang: langFromPath(entry.relPath),
+    }));
+    const overview = await this.repoOverviewService.generate(workspacePath, project.name, fileLangs);
+
     const updated = await this.projectsRepository.update(projectId, {
       status: 'ready',
       headRevision: revision,
       embeddingModel: this.embeddingProvider.id,
       embeddingDim: this.embeddingProvider.dimensions,
+      overview,
     });
     if (!updated) throw new NotFoundException(`Project ${projectId} not found`);
 

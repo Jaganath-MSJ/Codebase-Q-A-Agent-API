@@ -45,6 +45,13 @@ export class ProjectDto {
   @ApiProperty()
   chunkCount!: number;
 
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description: 'Digest injected into every chat prompt; null until the first successful index',
+  })
+  overview?: string | null;
+
   @ApiProperty()
   createdAt!: string;
 }

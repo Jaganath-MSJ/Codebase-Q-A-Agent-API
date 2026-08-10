@@ -3,12 +3,13 @@ import { WalkerModule } from '../walker/walker.module';
 import { ChunkingModule } from '../chunking/chunking.module';
 import { EmbeddingsModule } from '../embeddings/embeddings.module';
 import { SourcesModule } from '../sources/sources.module';
+import { OverviewModule } from '../overview/overview.module';
 import { IndexingService } from './indexing.service';
 import { ProgressReporter } from './progress.reporter';
 import { EmbeddingRateLimiter } from './rate-limiter';
 
 @Module({
-  imports: [WalkerModule, ChunkingModule, EmbeddingsModule, SourcesModule],
+  imports: [WalkerModule, ChunkingModule, EmbeddingsModule, SourcesModule, OverviewModule],
   providers: [IndexingService, ProgressReporter, EmbeddingRateLimiter],
   exports: [IndexingService, ProgressReporter],
 })

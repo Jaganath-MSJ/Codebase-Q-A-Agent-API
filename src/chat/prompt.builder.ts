@@ -11,6 +11,7 @@ export interface RecentExchange {
 }
 
 export interface ConversationContext {
+  overview?: string | null;
   summary?: string | null;
   recentExchanges: RecentExchange[];
 }
@@ -34,6 +35,9 @@ export function buildUserPrompt(
 ): string {
   const parts: string[] = [];
 
+  if (context?.overview) {
+    parts.push(`PROJECT OVERVIEW:\n${context.overview}`);
+  }
   if (context?.summary) {
     parts.push(`EARLIER IN THIS CONVERSATION:\n${context.summary}`);
   }

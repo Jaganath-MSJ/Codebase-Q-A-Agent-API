@@ -29,6 +29,9 @@ export const projects = pgTable(
     // Git sha, or a content-tree hash for non-git sources — compared against
     // the adapter's freshly materialized revision to skip a no-op re-index.
     headRevision: text('head_revision'),
+    // ~600-token digest (dir tree, language, detected frameworks, README lead)
+    // recomputed on every successful index and injected into every chat prompt.
+    overview: text('overview'),
     status: text('status').notNull().default('created'),
     fileCount: integer('file_count').notNull().default(0),
     chunkCount: integer('chunk_count').notNull().default(0),

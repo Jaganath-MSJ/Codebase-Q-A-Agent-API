@@ -15,6 +15,7 @@ function toDto(row: ProjectRow): ProjectDto {
     status: row.status,
     fileCount: row.fileCount,
     chunkCount: row.chunkCount,
+    overview: row.overview,
     createdAt: row.createdAt.toISOString(),
   };
 }
