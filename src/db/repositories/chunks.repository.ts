@@ -2,10 +2,17 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, count, eq, isNull } from 'drizzle-orm';
 import type { Db } from '../pool';
 import { DB_TOKEN } from '../tokens';
-import { chunks, ChunkRow, NewChunkRow } from '../schema';
+import { chunks, files, ChunkRow, NewChunkRow } from '../schema';
 
 export interface PendingEmbeddingChunk {
   id: string;
+  content: string;
+}
+
+export interface FirstChunkOfFile {
+  path: string;
+  startLine: number;
+  endLine: number;
   content: string;
 }
 
@@ -35,5 +42,24 @@ export class ChunksRepository {
       .from(chunks)
       .where(eq(chunks.projectId, projectId));
     return row?.value ?? 0;
+  }
+
+  /**
+   * One row per file (`ord = 0` is unique per file), used by the tour
+   * generator both as representative evidence (correct startLine/endLine to
+   * cite) and as the text scanned for the import-fan-in ranking heuristic —
+   * without re-walking disk or reading every chunk of every file.
+   */
+  async findFirstChunkPerFile(projectId: string): Promise<FirstChunkOfFile[]> {
+    return this.db
+      .select({
+        path: files.path,
+        startLine: chunks.startLine,
+        endLine: chunks.endLine,
+        content: chunks.content,
+      })
+      .from(chunks)
+      .innerJoin(files, eq(chunks.fileId, files.id))
+      .where(and(eq(chunks.projectId, projectId), eq(chunks.ord, 0)));
   }
 }

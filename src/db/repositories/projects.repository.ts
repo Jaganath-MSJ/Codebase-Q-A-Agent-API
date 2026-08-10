@@ -39,6 +39,7 @@ export class ProjectsRepository {
         | 'defaultBranch'
         | 'headRevision'
         | 'overview'
+        | 'tour'
       >
     >,
   ): Promise<ProjectRow | undefined> {

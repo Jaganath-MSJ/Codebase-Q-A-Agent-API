@@ -8,7 +8,7 @@ import type { ConversationRow, MessageRow, CitationRow, NewCitationRow } from '.
 import { CHAT_PROVIDER_TOKEN } from '../llm/llm.module';
 import type { ChatProvider, ChatUsage } from '../llm/chat-provider.interface';
 import { buildCondensationPrompt, buildSummaryPrompt, buildUserPrompt, SYSTEM_PROMPT, type EvidenceBlock } from './prompt.builder';
-import { parseCitations, type Citation } from './citation.parser';
+import { parseCitations, type Citation } from '../common/citation-parser';
 import { evictedExchanges, recentWindow, toExchanges, truncateAnswer, type Exchange } from './conversation-context';
 
 const TOP_K = 10;

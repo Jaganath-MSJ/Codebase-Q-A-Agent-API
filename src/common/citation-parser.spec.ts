@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseCitations, type EvidenceRef } from './citation.parser';
+import { parseCitations, type EvidenceRef } from './citation-parser';
 
 const evidence: EvidenceRef[] = [
   { path: 'src/auth.service.ts', startLine: 1, endLine: 34, content: 'export function validateUser() {}' }, // [1]
@@ -50,6 +50,23 @@ describe('parseCitations', () => {
   it('handles adjacent markers', () => {
     const citations = parseCitations('Both apply [1][2].', evidence);
     expect(citations.map((c) => c.marker)).toEqual([1, 2]);
+  });
+
+  // Observed live from the tour's map-reduce prompts: a model bundling
+  // several citations into one bracket instead of writing them separately.
+  it('splits a comma-separated bracket into individual markers', () => {
+    const citations = parseCitations('Both apply [1, 2].', evidence);
+    expect(citations.map((c) => c.marker)).toEqual([1, 2]);
+  });
+
+  it('splits a comma-separated bracket with no space after the comma', () => {
+    const citations = parseCitations('Both apply [1,2].', evidence);
+    expect(citations.map((c) => c.marker)).toEqual([1, 2]);
+  });
+
+  it('drops only the out-of-range member of a comma-separated bracket', () => {
+    const citations = parseCitations('See [1, 99].', evidence);
+    expect(citations.map((c) => c.marker)).toEqual([1]);
   });
 
   it('parses [10] as marker ten, not [1] followed by a literal 0', () => {

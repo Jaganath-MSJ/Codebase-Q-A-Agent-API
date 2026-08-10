@@ -11,7 +11,7 @@ Full plan in `docs/`. Read `docs/PLAN.md` before non-trivial work, and the relev
 - **All source file reads go through `src/common/read-file.ts`**, which normalizes CRLF to LF once and returns a `lines` array. Every line number derives from it. Ranges are 1-based and inclusive.
 - **The LLM never writes a file path** — only `[n]` markers. Citations are built from server-side data; out-of-range markers are dropped.
 - **Local disk is free; Postgres is 0.5 GB.** Repos, model weights, and the embedding and LLM caches live under `data/`, gitignored.
-- **`chunking/`, `retrieval/rrf.ts`, `chat/citation.parser.ts` are pure** — no I/O, no DB, no clock.
+- **`chunking/`, `retrieval/rrf.ts`, `common/citation-parser.ts` are pure** — no I/O, no DB, no clock. Shared across orchestrators (`chat/` and `tour/` both use it) precisely because it's pure — no DI or service coupling for two orchestrators to entangle.
 - **Capability modules never import orchestrators.** `embeddings/` does not import `jobs/`; `indexing/` and `chat/` never import each other.
 - **`class-validator` at the HTTP boundary, Zod only for `env.schema.ts`.** Nothing else uses either.
 

@@ -18,7 +18,10 @@ const FENCE_RE = /```[\s\S]*?```/g;
 // Groq's openai/gpt-oss-120b) substitute their own trained-in citation
 // style, e.g. 【3】 or 【3†L9-L15】, no matter how the prompt is worded —
 // recognized here too so citations still resolve regardless of provider.
-const MARKER_RE = /\[(\d+)\]|【(\d+)(?:†[^】]*)?】/g;
+// Also observed: a model bundling several markers into one bracket, e.g.
+// [2, 3] instead of [2][3] — group 1 captures the whole comma list so each
+// number can be split out below.
+const MARKER_RE = /\[(\d+(?:\s*,\s*\d+)*)\]|【(\d+)(?:†[^】]*)?】/g;
 
 export function parseCitations(answerText: string, evidence: EvidenceRef[]): Citation[] {
   const withoutFences = answerText.replace(FENCE_RE, '');
@@ -27,19 +30,22 @@ export function parseCitations(answerText: string, evidence: EvidenceRef[]): Cit
   const citations: Citation[] = [];
 
   for (const match of withoutFences.matchAll(MARKER_RE)) {
-    const marker = Number(match[1] ?? match[2]);
-    if (seen.has(marker)) continue;
-    if (marker < 1 || marker > evidence.length) continue;
+    const markers = match[1] ? match[1].split(',').map((n) => Number(n.trim())) : [Number(match[2])];
 
-    seen.add(marker);
-    const item = evidence[marker - 1]!;
-    citations.push({
-      marker,
-      path: item.path,
-      startLine: item.startLine,
-      endLine: item.endLine,
-      content: item.content,
-    });
+    for (const marker of markers) {
+      if (seen.has(marker)) continue;
+      if (marker < 1 || marker > evidence.length) continue;
+
+      seen.add(marker);
+      const item = evidence[marker - 1]!;
+      citations.push({
+        marker,
+        path: item.path,
+        startLine: item.startLine,
+        endLine: item.endLine,
+        content: item.content,
+      });
+    }
   }
 
   return citations;

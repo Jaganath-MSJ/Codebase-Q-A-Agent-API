@@ -15,6 +15,30 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
+export interface TourCitation {
+  marker: number;
+  path: string;
+  startLine: number;
+  endLine: number;
+}
+
+export interface TourSection {
+  title: string;
+  body: string;
+  citations: TourCitation[];
+}
+
+export interface TourRecord {
+  summary: string;
+  sections: TourSection[];
+  generatedAt: string;
+  // The project.headRevision this tour was generated against — lets a
+  // job.completed firing from an unchanged re-index (or a failed re-index of
+  // an otherwise-ready project) skip regeneration instead of burning 5-8
+  // model calls for a tour that would come out identical.
+  revision: string;
+}
+
 export const projects = pgTable(
   'projects',
   {
@@ -32,6 +56,7 @@ export const projects = pgTable(
     // ~600-token digest (dir tree, language, detected frameworks, README lead)
     // recomputed on every successful index and injected into every chat prompt.
     overview: text('overview'),
+    tour: jsonb('tour').$type<TourRecord>(),
     status: text('status').notNull().default('created'),
     fileCount: integer('file_count').notNull().default(0),
     chunkCount: integer('chunk_count').notNull().default(0),
