@@ -1,7 +1,8 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
-import { ApiOkResponse, ApiCreatedResponse, ApiAcceptedResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
+import { ApiOkResponse, ApiCreatedResponse, ApiAcceptedResponse, ApiNoContentResponse, ApiTags } from '@nestjs/swagger';
 import { ProjectsService } from './projects.service';
 import { JobsService } from '../jobs/jobs.service';
+import { IndexingService } from '../indexing/indexing.service';
 import { toJobDto } from '../jobs/jobs.controller';
 import { CreateProjectDto, ProjectDto, JobDto, FileQueryDto, FileViewDto, IndexRequestDto } from '../contracts';
 import { ProjectRow } from '../db/schema';
@@ -26,6 +27,7 @@ export class ProjectsController {
   constructor(
     private readonly projectsService: ProjectsService,
     private readonly jobsService: JobsService,
+    private readonly indexingService: IndexingService,
   ) {}
 
   @Post()
@@ -61,5 +63,12 @@ export class ProjectsController {
       query.endLine,
       query.context ?? 20,
     );
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiNoContentResponse()
+  async remove(@Param('id') id: string): Promise<void> {
+    await this.indexingService.deleteProject(id);
   }
 }

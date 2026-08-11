@@ -1,8 +1,9 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import * as path from 'node:path';
 import { ProjectsRepository } from '../db/repositories/projects.repository';
 import { FilesRepository } from '../db/repositories/files.repository';
 import { ChunksRepository } from '../db/repositories/chunks.repository';
+import { JobsRepository } from '../db/repositories/jobs.repository';
 import { WalkerService } from '../walker/walker.service';
 import { readSourceFile } from '../common/read-file';
 import { sha256 } from '../common/hash';
@@ -44,14 +45,20 @@ export interface IndexProgress {
 export type OnIndexProgress = (update: IndexProgress) => Promise<void> | void;
 export type ShouldCancel = () => Promise<boolean>;
 
+// Matches the unique `one_active_job_per_project` index's WHERE clause.
+const ACTIVE_JOB_STATUSES = new Set(['queued', 'running', 'paused']);
+
 export class IndexCanceledError extends Error {}
 
 @Injectable()
 export class IndexingService {
+  private readonly logger = new Logger(IndexingService.name);
+
   constructor(
     private readonly projectsRepository: ProjectsRepository,
     private readonly filesRepository: FilesRepository,
     private readonly chunksRepository: ChunksRepository,
+    private readonly jobsRepository: JobsRepository,
     private readonly walkerService: WalkerService,
     private readonly sourceAdapterRegistry: SourceAdapterRegistry,
     private readonly repoOverviewService: RepoOverviewService,
@@ -177,6 +184,39 @@ export class IndexingService {
     if (!updated) throw new NotFoundException(`Project ${projectId} not found`);
 
     return updated;
+  }
+
+  /**
+   * Rejects while a job is queued/running/paused (the same set the unique
+   * `one_active_job_per_project` index guards) — deleting mid-index would
+   * race the worker's own `materialize()`/chunk-insert calls against this
+   * cleanup, corrupting neither but landing exactly the concurrent-write
+   * EBUSY window the phase doc warns is otherwise rare. Deletes the DB row
+   * first (cascading to files/chunks/jobs/conversations), then cleans up the
+   * on-disk workspace — a cleanup failure (e.g. `fs.rm` exhausting its
+   * `EBUSY` retries) is logged, not thrown, since the project is already
+   * gone from every listing at that point and a leftover directory is a
+   * disk-space concern, not a correctness one. Leaving the DB row in place
+   * until cleanup succeeds would instead risk a project the user can never
+   * get rid of if cleanup keeps failing.
+   */
+  async deleteProject(projectId: string): Promise<void> {
+    const project = await this.projectsRepository.findById(projectId);
+    if (!project) throw new NotFoundException(`Project ${projectId} not found`);
+
+    const latestJob = await this.jobsRepository.findLatestByProject(projectId);
+    if (latestJob && ACTIVE_JOB_STATUSES.has(latestJob.status)) {
+      throw new ConflictException(`Project ${projectId} has an active indexing job — cancel it first`);
+    }
+
+    await this.projectsRepository.delete(projectId);
+
+    try {
+      const adapter = this.sourceAdapterRegistry.getAdapter(project.sourceKind);
+      await adapter.cleanup(project);
+    } catch (err) {
+      this.logger.error(`Workspace cleanup failed for deleted project ${projectId}: ${String(err)}`);
+    }
   }
 
   private async embedPendingChunks(

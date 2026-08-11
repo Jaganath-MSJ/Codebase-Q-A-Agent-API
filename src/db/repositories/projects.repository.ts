@@ -50,4 +50,10 @@ export class ProjectsRepository {
       .returning();
     return row;
   }
+
+  /** Cascades to files/chunks/indexing_jobs/conversations/messages/citations via FK ON DELETE CASCADE. */
+  async delete(id: string): Promise<boolean> {
+    const result = await this.db.delete(projects).where(eq(projects.id, id)).returning({ id: projects.id });
+    return result.length > 0;
+  }
 }
