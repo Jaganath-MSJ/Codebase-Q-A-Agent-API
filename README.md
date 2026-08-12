@@ -57,6 +57,22 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
+## Retrieval quality
+
+`npm run eval` scores retrieval alone (zero LLM calls) against `evals/questions.json`,
+25 hand-written questions with known-correct file paths.
+
+| Mode | recall@5 | recall@10 | MRR |
+|---|---|---|---|
+| vector | 0.96 | 1.00 | 0.77 |
+| fts | | | |
+| trigram | | | |
+| hybrid | | | |
+
+This baseline is against `fixtures/tiny-repo` only — see `docs/PROGRESS.md`'s Phase 5
+notes for why, and for why it scores this well despite the phase doc's warning that
+vector-only should score badly on identifier questions.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

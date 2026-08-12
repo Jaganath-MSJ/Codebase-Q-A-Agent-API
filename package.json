@@ -14,7 +14,8 @@
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "eval": "ts-node -r tsconfig-paths/register evals/run-eval.ts"
   },
   "dependencies": {
     "@google/genai": "^2.15.0",
