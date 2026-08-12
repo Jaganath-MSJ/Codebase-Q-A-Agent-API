@@ -9,6 +9,7 @@ import { readSourceFile } from '../common/read-file';
 import { sha256 } from '../common/hash';
 import { CHUNKER_TOKEN } from '../chunking/chunking.module';
 import type { Chunker } from '../chunking/chunker.interface';
+import { buildSearchText } from '../retrieval/identifiers';
 import { EMBEDDING_PROVIDER_TOKEN } from '../embeddings/embeddings.module';
 import type { EmbeddingProvider } from '../embeddings/embedding-provider.interface';
 import { SourceAdapterRegistry } from '../sources/source-adapter.registry';
@@ -133,6 +134,7 @@ export class IndexingService {
           endLine: chunk.endLine,
           content: chunk.content,
           contentHash: sha256(chunk.content),
+          searchText: buildSearchText(chunk.content),
         }));
 
         await this.filesRepository.replaceFile(

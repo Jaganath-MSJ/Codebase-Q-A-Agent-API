@@ -23,7 +23,7 @@ export class SearchController {
   @Post()
   @ApiOkResponse({ type: ScoredChunkDto, isArray: true })
   async search(@Body() dto: SearchRequestDto): Promise<ScoredChunkDto[]> {
-    const chunks = await this.retrievalService.search(dto.projectId, dto.query);
+    const chunks = await this.retrievalService.search(dto.projectId, dto.query, dto.mode, dto.k);
     return chunks.map(toScoredChunkDto);
   }
 }

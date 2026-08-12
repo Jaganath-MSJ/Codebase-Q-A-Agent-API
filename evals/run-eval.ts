@@ -7,11 +7,12 @@ import { ConfigModule } from '../src/config/config.module';
 import { DbModule } from '../src/db/db.module';
 import { ProjectsRepository } from '../src/db/repositories/projects.repository';
 import { RetrievalModule } from '../src/retrieval/retrieval.module';
-import { RetrievalService } from '../src/retrieval/retrieval.service';
+import { RetrievalService, RetrievalMode } from '../src/retrieval/retrieval.service';
 import { average, recallAt, reciprocalRank } from './metrics';
 
 const PROJECT_NAME = 'Tiny Repo';
 const TOP_K = 10;
+const MODES: RetrievalMode[] = ['vector', 'fts'];
 
 interface EvalQuestion {
   q: string;
@@ -39,32 +40,48 @@ async function main(): Promise<void> {
       );
     }
 
-    const recall5: number[] = [];
-    const recall10: number[] = [];
-    const mrr: number[] = [];
+    console.log(`Evaluating ${questions.length} questions against '${project.name}'\n`);
 
-    console.log(`Evaluating ${questions.length} questions against '${project.name}' (vector-only)\n`);
+    const rows: { mode: RetrievalMode; recall5: number; recall10: number; mrr: number }[] = [];
 
-    for (const question of questions) {
-      const results = await retrievalService.search(project.id, question.q, TOP_K);
+    for (const mode of MODES) {
+      const recall5: number[] = [];
+      const recall10: number[] = [];
+      const mrr: number[] = [];
 
-      const r5 = recallAt(results, question.expectedFiles, 5);
-      const r10 = recallAt(results, question.expectedFiles, 10);
-      const rr = reciprocalRank(results, question.expectedFiles);
+      console.log(`-- ${mode} --`);
 
-      recall5.push(r5);
-      recall10.push(r10);
-      mrr.push(rr);
+      for (const question of questions) {
+        const results = await retrievalService.search(project.id, question.q, mode, TOP_K);
 
-      const mark = rr > 0 ? `hit @${Math.round(1 / rr)}` : 'miss';
-      console.log(`  [${mark.padEnd(8)}] ${question.q}`);
+        const r5 = recallAt(results, question.expectedFiles, 5);
+        const r10 = recallAt(results, question.expectedFiles, 10);
+        const rr = reciprocalRank(results, question.expectedFiles);
+
+        recall5.push(r5);
+        recall10.push(r10);
+        mrr.push(rr);
+
+        const mark = rr > 0 ? `hit @${Math.round(1 / rr)}` : 'miss';
+        console.log(`  [${mark.padEnd(8)}] ${question.q}`);
+      }
+
+      rows.push({
+        mode,
+        recall5: average(recall5),
+        recall10: average(recall10),
+        mrr: average(mrr),
+      });
+      console.log('');
     }
 
-    console.log('\n| Mode   | recall@5 | recall@10 | MRR  |');
+    console.log('| Mode   | recall@5 | recall@10 | MRR  |');
     console.log('|--------|----------|-----------|------|');
-    console.log(
-      `| vector | ${average(recall5).toFixed(2).padStart(8)} | ${average(recall10).toFixed(2).padStart(9)} | ${average(mrr).toFixed(2).padStart(4)} |`,
-    );
+    for (const row of rows) {
+      console.log(
+        `| ${row.mode.padEnd(6)} | ${row.recall5.toFixed(2).padStart(8)} | ${row.recall10.toFixed(2).padStart(9)} | ${row.mrr.toFixed(2).padStart(4)} |`,
+      );
+    }
   } finally {
     await app.close();
   }

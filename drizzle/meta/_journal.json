@@ -99,6 +99,13 @@
       "when": 1786326784859,
       "tag": "0013_even_sentry",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1786503000169,
+      "tag": "0014_fts_search_text",
+      "breakpoints": true
     }
   ]
 }

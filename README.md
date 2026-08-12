@@ -65,13 +65,20 @@ $ npm run test:cov
 | Mode | recall@5 | recall@10 | MRR |
 |---|---|---|---|
 | vector | 0.96 | 1.00 | 0.77 |
-| fts | | | |
+| fts | 0.88 | 0.88 | 0.65 |
 | trigram | | | |
 | hybrid | | | |
 
 This baseline is against `fixtures/tiny-repo` only — see `docs/PROGRESS.md`'s Phase 5
 notes for why, and for why it scores this well despite the phase doc's warning that
 vector-only should score badly on identifier questions.
+
+FTS's per-question misses are exactly the two failure modes it's expected to have and
+vector doesn't: the deliberate typo question (`findUsrByEmail`, no fuzzy matching —
+that's trigram's job in 5.3) and the purely structural/meta question about which file
+forces the chunker to split. Where it wins is sharper: on several exact-identifier
+questions FTS finds the right file at rank 1 while vector buried it further down
+(e.g. "Where is the `User` interface defined?" — vector rank 5, FTS rank 1).
 
 ## Deployment
 

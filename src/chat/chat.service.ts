@@ -125,7 +125,12 @@ export class ChatService {
       await this.messagesRepository.setRetrievalQuery(assistantMessage.id, retrievalQuery);
 
       yield { type: 'status', data: { stage: 'retrieving' } };
-      const scoredChunks = await this.retrievalService.search(conversation.projectId, retrievalQuery, TOP_K);
+      const scoredChunks = await this.retrievalService.search(
+        conversation.projectId,
+        retrievalQuery,
+        'vector',
+        TOP_K,
+      );
       if (signal.aborted) return;
 
       const evidence: EvidenceBlock[] = scoredChunks.map((chunk) => ({

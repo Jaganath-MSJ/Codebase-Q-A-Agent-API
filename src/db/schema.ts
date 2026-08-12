@@ -12,8 +12,18 @@ import {
   check,
   boolean,
   jsonb,
+  customType,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+
+// tsvector has no built-in drizzle column type; it's only ever read via raw
+// SQL rank functions, never mapped through JS, so a plain string data type
+// is enough to let drizzle emit the right DDL.
+const tsvector = customType<{ data: string }>({
+  dataType() {
+    return 'tsvector';
+  },
+});
 
 export interface TourCitation {
   marker: number;
@@ -109,8 +119,15 @@ export const chunks = pgTable(
     content: text('content').notNull(),
     contentHash: text('content_hash').notNull(),
     embedding: vector('embedding', { dimensions: 768 }),
+    // Chunk content plus its identifier-split form (see retrieval/identifiers.ts) —
+    // lets a plain-English query like "user email" match `getUserByEmail`.
+    searchText: text('search_text').notNull().default(''),
+    tsv: tsvector('tsv').generatedAlwaysAs(sql`to_tsvector('simple', search_text)`),
   },
-  (table) => [unique().on(table.fileId, table.ord)],
+  (table) => [
+    unique().on(table.fileId, table.ord),
+    index('chunks_tsv_gin').using('gin', table.tsv),
+  ],
 );
 
 export type ChunkRow = typeof chunks.$inferSelect;
