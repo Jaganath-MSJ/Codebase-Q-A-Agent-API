@@ -14,3 +14,14 @@ export function splitIdentifiers(text: string): string {
 export function buildSearchText(content: string): string {
   return `${content}\n${splitIdentifiers(content)}`;
 }
+
+// Catches camelCase (getUserByEmail), SCREAMING_SNAKE_CASE (RATE_LIMIT_MS),
+// and a method-call shape (service.method(). Used to decide whether a
+// question mentions a specific identifier at all — the trigram arm is only
+// useful (and only adds noise otherwise) when it does.
+const IDENTIFIER_TOKEN_RE = /\b[a-z]+[A-Z]\w*|\b[A-Z_]{3,}\b|\b\w+\.\w+\(/g;
+
+/** Extracts identifier-shaped tokens from a question, deduplicated. */
+export function extractIdentifierTokens(text: string): string[] {
+  return [...new Set(text.match(IDENTIFIER_TOKEN_RE) ?? [])];
+}

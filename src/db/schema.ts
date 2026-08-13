@@ -127,6 +127,7 @@ export const chunks = pgTable(
   (table) => [
     unique().on(table.fileId, table.ord),
     index('chunks_tsv_gin').using('gin', table.tsv),
+    index('chunks_trgm_gin').using('gin', table.searchText.op('gin_trgm_ops')),
   ],
 );
 

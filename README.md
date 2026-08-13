@@ -65,9 +65,9 @@ $ npm run test:cov
 | Mode | recall@5 | recall@10 | MRR |
 |---|---|---|---|
 | vector | 0.96 | 1.00 | 0.77 |
-| fts | 0.88 | 0.88 | 0.65 |
-| trigram | | | |
-| hybrid | | | |
+| fts | 0.88 | 0.88 | 0.63 |
+| trigram | 0.12 | 0.12 | 0.10 |
+| **hybrid** | 0.92 | 1.00 | **0.80** |
 
 This baseline is against `fixtures/tiny-repo` only — see `docs/PROGRESS.md`'s Phase 5
 notes for why, and for why it scores this well despite the phase doc's warning that
@@ -75,10 +75,52 @@ vector-only should score badly on identifier questions.
 
 FTS's per-question misses are exactly the two failure modes it's expected to have and
 vector doesn't: the deliberate typo question (`findUsrByEmail`, no fuzzy matching —
-that's trigram's job in 5.3) and the purely structural/meta question about which file
+that's trigram's job) and the purely structural/meta question about which file
 forces the chunker to split. Where it wins is sharper: on several exact-identifier
 questions FTS finds the right file at rank 1 while vector buried it further down
 (e.g. "Where is the `User` interface defined?" — vector rank 5, FTS rank 1).
+
+**Trigram's low overall number is expected, not a bug — it only fires on questions
+containing a camelCase/SCREAMING_SNAKE/dotted-call-shaped token** (`extractIdentifierTokens`),
+which most of these 25 questions don't have (`slugify`, `Point`, `Rectangle` are all
+single lowercase or single-capitalized words — no case *transition*, so the shape
+regex correctly doesn't treat them as identifiers). On the one question built
+specifically to need it — the deliberate typo `findUsrByEmail` — trigram hits at
+rank 1, exactly the doc's own headline example working.
+
+**Hybrid does not "roughly double" vector-only recall@10 here — it can't, vector-only
+is already at the 1.00 ceiling on this fixture** (see the 5.1 note on why). What
+*is* real: hybrid's MRR (0.80) beats vector's (0.77), and recall@10 ties at the
+ceiling; recall@5 sits fractionally below vector (0.92 vs 0.96) on exactly one
+question, "What is the entry point of this program?" — a purely conceptual
+question with no identifier for FTS or trigram to anchor on, where even vector
+itself only gets a partial win (rank 3, not rank 1).
+
+That one remaining case is genuinely explained, not hand-waved: a chunk that
+picks up a rank vote from *two* mediocre-strength arms can still edge out a
+chunk with *one* strong vote, when the weaker arms' matches are coincidental
+filler-word overlap rather than real relevance (FTS's OR-matching, needed so it
+returns anything at all on prose questions, lets that through). This is a known,
+accepted property of rank fusion — not something to chase further by hand-tuning
+RRF's `k` on one 11-file fixture (measured: sweeping `k` from 60 down to 10 changed
+nothing here, because more arm-votes wins regardless of `k`'s exact value). A
+genuinely different, non-fixture-specific bug *was* found and fixed here, though:
+see the "one canonical chunk id per file" note in `docs/PROGRESS.md` — before that
+fix, a single heavily-chunked file could occupy several slots of the fused ranking
+at once, which is exactly the kind of accidental chunker-artifact advantage that
+should never decide a ranking.
+
+The doc's "roughly double" recall@10 claim describes a messier real repository with
+actual boilerplate collapse and config-needle-in-a-haystack chunks (see the 5.1 note
+on why that repo was deliberately deferred); expect hybrid's real recall@10 advantage
+to show up there, where vector-only isn't already at 1.00.
+
+FTS's and trigram's MRR moved slightly (0.65→0.63, 0.12→0.10) after adding `chunks.id`
+as a secondary `ORDER BY` key to all three retrievers — the canonical-chunk-per-file
+fix above means an exact-score tie can now decide which physical chunk represents a
+file across repeated identical requests, so leaving tie order to Postgres's whim was
+no longer acceptable. The exact hit/miss set per question didn't change, only which
+tied row won a given rank — expected, and the point of the fix.
 
 ## Deployment
 

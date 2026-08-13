@@ -37,7 +37,11 @@ export class VectorRetriever {
         .from(chunks)
         .innerJoin(files, eq(files.id, chunks.fileId))
         .where(and(eq(chunks.projectId, projectId), isNotNull(chunks.embedding)))
-        .orderBy(distance)
+        // Secondary key: Postgres doesn't guarantee row order across equal
+        // primary keys, and HybridRetriever now picks one canonical chunk
+        // per file across arms — an unstable tie could flip which chunk
+        // represents a file between otherwise-identical requests.
+        .orderBy(distance, chunks.id)
         .limit(limit);
     });
   }

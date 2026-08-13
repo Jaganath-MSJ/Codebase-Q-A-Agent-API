@@ -33,7 +33,8 @@ export class FtsRetriever {
       .from(chunks)
       .innerJoin(files, eq(files.id, chunks.fileId))
       .where(and(eq(chunks.projectId, projectId), sql`${chunks.tsv} @@ ${tsQuery}`))
-      .orderBy(sql`ts_rank_cd(${chunks.tsv}, ${tsQuery}) desc`)
+      // Secondary key: see the same comment in vector.retriever.ts.
+      .orderBy(sql`ts_rank_cd(${chunks.tsv}, ${tsQuery}) desc`, chunks.id)
       .limit(limit);
   }
 }

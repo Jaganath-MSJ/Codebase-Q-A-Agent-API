@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSearchText, splitIdentifiers } from './identifiers';
+import { buildSearchText, extractIdentifierTokens, splitIdentifiers } from './identifiers';
 
 describe('splitIdentifiers', () => {
   it('splits camelCase', () => {
@@ -37,5 +37,29 @@ describe('buildSearchText', () => {
     expect(buildSearchText('const RATE_LIMIT_MS = 1000;')).toBe(
       'const RATE_LIMIT_MS = 1000;\nconst RATE LIMIT MS 1000',
     );
+  });
+});
+
+describe('extractIdentifierTokens', () => {
+  it('catches a camelCase identifier', () => {
+    expect(extractIdentifierTokens('Where is getUserByEmail defined?')).toEqual(['getUserByEmail']);
+  });
+
+  it('catches a SCREAMING_SNAKE_CASE constant', () => {
+    expect(extractIdentifierTokens('Where is RATE_LIMIT_MS configured?')).toEqual(['RATE_LIMIT_MS']);
+  });
+
+  it('catches a method-call shape', () => {
+    expect(extractIdentifierTokens('What calls service.method(?')).toEqual(['service.method(']);
+  });
+
+  it('is empty for a purely conceptual question', () => {
+    expect(extractIdentifierTokens('how does error handling work')).toEqual([]);
+  });
+
+  it('deduplicates repeated tokens', () => {
+    expect(extractIdentifierTokens('getUserByEmail calls getUserByEmail again')).toEqual([
+      'getUserByEmail',
+    ]);
   });
 });

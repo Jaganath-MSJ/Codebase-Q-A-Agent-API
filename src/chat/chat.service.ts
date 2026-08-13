@@ -128,7 +128,7 @@ export class ChatService {
       const scoredChunks = await this.retrievalService.search(
         conversation.projectId,
         retrievalQuery,
-        'vector',
+        'hybrid',
         TOP_K,
       );
       if (signal.aborted) return;

@@ -12,7 +12,7 @@ import { average, recallAt, reciprocalRank } from './metrics';
 
 const PROJECT_NAME = 'Tiny Repo';
 const TOP_K = 10;
-const MODES: RetrievalMode[] = ['vector', 'fts'];
+const MODES: RetrievalMode[] = ['vector', 'fts', 'trigram', 'hybrid'];
 
 interface EvalQuestion {
   q: string;
@@ -75,11 +75,11 @@ async function main(): Promise<void> {
       console.log('');
     }
 
-    console.log('| Mode   | recall@5 | recall@10 | MRR  |');
-    console.log('|--------|----------|-----------|------|');
+    console.log('| Mode    | recall@5 | recall@10 | MRR  |');
+    console.log('|---------|----------|-----------|------|');
     for (const row of rows) {
       console.log(
-        `| ${row.mode.padEnd(6)} | ${row.recall5.toFixed(2).padStart(8)} | ${row.recall10.toFixed(2).padStart(9)} | ${row.mrr.toFixed(2).padStart(4)} |`,
+        `| ${row.mode.padEnd(7)} | ${row.recall5.toFixed(2).padStart(8)} | ${row.recall10.toFixed(2).padStart(9)} | ${row.mrr.toFixed(2).padStart(4)} |`,
       );
     }
   } finally {

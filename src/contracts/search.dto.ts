@@ -11,9 +11,9 @@ export class SearchRequestDto {
   @IsNotEmpty()
   query!: string;
 
-  @ApiProperty({ enum: ['vector', 'fts'], description: 'Which retriever to run' })
-  @IsIn(['vector', 'fts'])
-  mode!: 'vector' | 'fts';
+  @ApiProperty({ enum: ['vector', 'fts', 'trigram', 'hybrid'], description: 'Which retriever to run' })
+  @IsIn(['vector', 'fts', 'trigram', 'hybrid'])
+  mode!: 'vector' | 'fts' | 'trigram' | 'hybrid';
 
   @ApiPropertyOptional({ description: 'Max results to return, default 20' })
   @IsOptional()
