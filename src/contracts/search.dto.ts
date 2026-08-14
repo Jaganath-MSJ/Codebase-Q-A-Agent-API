@@ -39,6 +39,9 @@ export class ScoredChunkDto {
   @ApiProperty()
   content!: string;
 
+  @ApiProperty({ type: String, nullable: true, description: 'Qualified name from the structural chunker' })
+  symbol!: string | null;
+
   @ApiProperty()
   score!: number;
 }

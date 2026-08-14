@@ -28,6 +28,7 @@ export class FtsRetriever {
         endLine: chunks.endLine,
         content: chunks.content,
         contentHash: chunks.contentHash,
+        symbol: chunks.symbol,
         score: sql<number>`ts_rank_cd(${chunks.tsv}, ${tsQuery})`,
       })
       .from(chunks)

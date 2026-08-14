@@ -11,6 +11,9 @@ manual verification of the indexing pipeline.
 - `src/utils.ts` — a handful of small helper functions
 - `src/big-module.ts` — long enough to force the chunker to split it into
   multiple overlapping chunks
+- `src/shapes.py` — a small Python file (class with methods, plus a
+  top-level function), so the tree-sitter chunker's Python grammar and
+  `chunks.symbol` population have something real to chunk
 
 The remaining files exist to exercise edge cases in the chunker and the
 walker: an empty file, a file with no trailing newline, a file using CRLF

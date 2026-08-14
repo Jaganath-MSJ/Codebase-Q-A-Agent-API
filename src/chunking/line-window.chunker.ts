@@ -1,8 +1,8 @@
 import type { Chunk, Chunker } from './chunker.interface';
 
-const TARGET_LINES = 60;
+export const TARGET_LINES = 60;
 const OVERLAP_LINES = 15;
-const MIN_CHUNK_LINES = 30;
+export const MIN_CHUNK_LINES = 30;
 const BOUNDARY_SEARCH_WINDOW = 20;
 
 const DECLARATION_START = /^\s*(export |function |class |def |const \w+ = )/;

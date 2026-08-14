@@ -64,10 +64,14 @@ $ npm run test:cov
 
 | Mode | recall@5 | recall@10 | MRR |
 |---|---|---|---|
-| vector | 0.96 | 1.00 | 0.77 |
-| fts | 0.88 | 0.88 | 0.63 |
+| vector | 1.00 | 1.00 | 0.77 |
+| fts | 0.84 | 0.88 | 0.58 |
 | trigram | 0.12 | 0.12 | 0.10 |
-| **hybrid** | 0.92 | 1.00 | **0.80** |
+| **hybrid** | 0.92 | 1.00 | 0.77 |
+
+(Numbers above are post-5.4, structural chunking. Pre-5.4 line-window numbers, for
+comparison: vector 0.96/1.00/0.77, fts 0.88/0.88/0.63, trigram 0.12/0.12/0.10,
+hybrid 0.92/1.00/0.80.)
 
 This baseline is against `fixtures/tiny-repo` only — see `docs/PROGRESS.md`'s Phase 5
 notes for why, and for why it scores this well despite the phase doc's warning that
@@ -121,6 +125,40 @@ fix above means an exact-score tie can now decide which physical chunk represent
 file across repeated identical requests, so leaving tie order to Postgres's whim was
 no longer acceptable. The exact hit/miss set per question didn't change, only which
 tied row won a given rank — expected, and the point of the fix.
+
+### 5.4 — structural chunking
+
+Chunk boundaries now follow function/class/method nodes (via tree-sitter) instead of
+blank-line/brace heuristics, and `chunks.symbol` is populated (verified live: real
+`symbol` values for both TypeScript and Python files in `fixtures/tiny-repo`, e.g.
+`"AuthService"`-style qualified names for class methods, comma-joined names like
+`"findUserByEmail, validateUser, comparePassword, registerUser"` where several small
+adjacent functions were merged up toward the target chunk size). The doc's own
+framing for this slice — "a smaller lift than 5.3, and worth knowing that" — held
+exactly: vector ticked up (0.96→1.00 recall@5, one more question now lands in the
+top 5), but FTS and hybrid's MRR ticked *down* slightly (0.65→0.58, 0.80→0.77).
+
+That drop is explained, not just observed: structural chunking deliberately produces
+*fewer, larger* chunks by merging small adjacent functions (`buildSearchText`'s
+identifier-split form included) — a term that used to dominate a small, single-purpose
+chunk's `tsv` now shares a bigger chunk with several unrelated functions' identifiers,
+diluting `ts_rank_cd`'s density-based score and nudging that chunk's rank down a
+position or two. This is a real, structural trade-off (better chunk *boundaries*,
+slightly less lexical *focus* per chunk on a fixture this small), not a regression to
+chase — the doc predicted exactly this shape of result before a single line was written.
+
+Two things verified directly, beyond the recall table:
+
+- **`CHUNKER_VERSION` invalidation re-chunks without forcing re-embedding.** Set every
+  file's `content_hash` to a stale value (the same effect a version bump has) and
+  force-reindexed: all 11 files were genuinely re-chunked (new chunk rows, new ids),
+  but the on-disk embedding cache file count was identical before and after (275 files,
+  zero new entries) — the rebuilt chunk text was byte-identical to what was already
+  cached, so the local embedding model was never re-invoked.
+- **The context header never leaked into `chunks.content`.** The chunker property
+  test (extended to the new `TreeSitterChunker`, `src/chunking/tree-sitter.chunker.spec.ts`)
+  still asserts `content === lines.slice(startLine-1, endLine).join('\n')` for every
+  chunk of every fixture file, header-free.
 
 ## Deployment
 

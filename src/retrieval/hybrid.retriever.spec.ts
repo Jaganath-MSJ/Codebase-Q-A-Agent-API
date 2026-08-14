@@ -3,7 +3,7 @@ import { buildCanonicalIdByPath, toCanonicalRankedIds } from './hybrid.retriever
 import type { ScoredChunk } from './vector.retriever';
 
 function chunk(chunkId: string, path: string): ScoredChunk {
-  return { chunkId, path, startLine: 1, endLine: 1, content: '', contentHash: '', score: 0 };
+  return { chunkId, path, startLine: 1, endLine: 1, content: '', contentHash: '', symbol: null, score: 0 };
 }
 
 describe('buildCanonicalIdByPath', () => {

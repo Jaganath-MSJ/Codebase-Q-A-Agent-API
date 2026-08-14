@@ -31,6 +31,7 @@ export class TrigramRetriever {
         endLine: chunks.endLine,
         content: chunks.content,
         contentHash: chunks.contentHash,
+        symbol: chunks.symbol,
         score: sql<number>`word_similarity(${probe}, ${chunks.searchText})`,
       })
       .from(chunks)

@@ -11,6 +11,7 @@ export interface ScoredChunk {
   endLine: number;
   content: string;
   contentHash: string;
+  symbol: string | null;
   score: number;
 }
 
@@ -32,6 +33,7 @@ export class VectorRetriever {
           endLine: chunks.endLine,
           content: chunks.content,
           contentHash: chunks.contentHash,
+          symbol: chunks.symbol,
           score: sql<number>`1 - (${distance})`,
         })
         .from(chunks)

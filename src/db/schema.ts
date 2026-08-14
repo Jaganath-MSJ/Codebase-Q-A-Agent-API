@@ -119,6 +119,10 @@ export const chunks = pgTable(
     content: text('content').notNull(),
     contentHash: text('content_hash').notNull(),
     embedding: vector('embedding', { dimensions: 768 }),
+    // Qualified name from the structural chunker (e.g. "AuthService.validateUser") —
+    // null for chunks the line-window fallback produced, or for gap-fill chunks
+    // between structural nodes. See chunking/tree-sitter.chunker.ts.
+    symbol: text('symbol'),
     // Chunk content plus its identifier-split form (see retrieval/identifiers.ts) —
     // lets a plain-English query like "user email" match `getUserByEmail`.
     searchText: text('search_text').notNull().default(''),

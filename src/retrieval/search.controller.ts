@@ -11,6 +11,7 @@ function toScoredChunkDto(chunk: ScoredChunk): ScoredChunkDto {
     startLine: chunk.startLine,
     endLine: chunk.endLine,
     content: chunk.content,
+    symbol: chunk.symbol,
     score: chunk.score,
   };
 }

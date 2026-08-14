@@ -8,7 +8,8 @@ import { WalkerService } from '../walker/walker.service';
 import { readSourceFile } from '../common/read-file';
 import { sha256 } from '../common/hash';
 import { CHUNKER_TOKEN } from '../chunking/chunking.module';
-import type { Chunker } from '../chunking/chunker.interface';
+import { CHUNKER_VERSION, type Chunker } from '../chunking/chunker.interface';
+import { buildEmbeddingText } from '../chunking/embedding-text';
 import { buildSearchText } from '../retrieval/identifiers';
 import { EMBEDDING_PROVIDER_TOKEN } from '../embeddings/embeddings.module';
 import type { EmbeddingProvider } from '../embeddings/embedding-provider.interface';
@@ -120,27 +121,32 @@ export class IndexingService {
       if (await shouldCancel?.()) throw new IndexCanceledError(`Canceled during chunking at ${entry.relPath}`);
 
       const { text, lines } = await readSourceFile(entry.absPath);
-      const contentHash = sha256(text);
+      const lang = langFromPath(entry.relPath);
+      // CHUNKER_VERSION participates in the hash so bumping it invalidates
+      // every file's "unchanged" check exactly once, forcing a full
+      // re-chunk even though no file on disk actually changed.
+      const contentHash = sha256(`${CHUNKER_VERSION}\n${text}`);
       const existingFile = existingByPath.get(entry.relPath);
 
       // Unchanged since the last index: leave its files/chunks row untouched,
       // including any embedding it already has — this is what makes a
       // re-index of an unchanged repo skip chunking AND embedding entirely.
       if (!existingFile || existingFile.contentHash !== contentHash) {
-        const chunkList = this.chunker.chunk(lines);
+        const chunkList = this.chunker.chunk(lines, lang);
         const chunkRows: Omit<NewChunkRow, 'projectId' | 'fileId'>[] = chunkList.map((chunk) => ({
           ord: chunk.ord,
           startLine: chunk.startLine,
           endLine: chunk.endLine,
           content: chunk.content,
           contentHash: sha256(chunk.content),
+          symbol: chunk.symbol ?? null,
           searchText: buildSearchText(chunk.content),
         }));
 
         await this.filesRepository.replaceFile(
           projectId,
           existingFile?.id,
-          { path: entry.relPath, lang: langFromPath(entry.relPath), contentHash, lineCount: lines.length },
+          { path: entry.relPath, lang, contentHash, lineCount: lines.length },
           chunkRows,
         );
       } else {
@@ -243,7 +249,7 @@ export class IndexingService {
 
       await this.rateLimiter.reserve();
       const vectors = await withEmbeddingRetry(async () => {
-        const result = await this.embeddingProvider.embedDocuments(group.map((c) => c.content));
+        const result = await this.embeddingProvider.embedDocuments(group.map((c) => buildEmbeddingText(c)));
         // The provider can return a short or malformed batch without throwing
         // (observed with the local ONNX model under memory pressure) — turn that
         // into a loud, retryable error instead of a cryptic pgvector dimension

@@ -7,6 +7,10 @@ import { chunks, files, ChunkRow, NewChunkRow } from '../schema';
 export interface PendingEmbeddingChunk {
   id: string;
   content: string;
+  symbol: string | null;
+  path: string;
+  startLine: number;
+  endLine: number;
 }
 
 export interface FirstChunkOfFile {
@@ -27,8 +31,16 @@ export class ChunksRepository {
 
   async findWithoutEmbedding(projectId: string): Promise<PendingEmbeddingChunk[]> {
     return this.db
-      .select({ id: chunks.id, content: chunks.content })
+      .select({
+        id: chunks.id,
+        content: chunks.content,
+        symbol: chunks.symbol,
+        path: files.path,
+        startLine: chunks.startLine,
+        endLine: chunks.endLine,
+      })
       .from(chunks)
+      .innerJoin(files, eq(chunks.fileId, files.id))
       .where(and(eq(chunks.projectId, projectId), isNull(chunks.embedding)));
   }
 
