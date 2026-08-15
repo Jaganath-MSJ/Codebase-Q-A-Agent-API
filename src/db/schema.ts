@@ -25,6 +25,15 @@ const tsvector = customType<{ data: string }>({
   },
 });
 
+// pg-core has no built-in `bytea` helper; node-postgres already maps it to a
+// plain Node Buffer on both read and write, so this customType just needs to
+// name the DDL type — no serialize/deserialize hooks required.
+const bytea = customType<{ data: Buffer }>({
+  dataType() {
+    return 'bytea';
+  },
+});
+
 export interface TourCitation {
   marker: number;
   path: string;
@@ -261,3 +270,34 @@ export const citations = pgTable(
 
 export type CitationRow = typeof citations.$inferSelect;
 export type NewCitationRow = typeof citations.$inferInsert;
+
+// Separate table, not a column on `projects` — `SELECT * FROM projects` is
+// something that happens constantly (logs, the debug UI, an unrelated
+// console.log), and a secret must never be in the row that returns. Keeping
+// it here means fetching a credential is something a caller has to choose
+// to do. `keyVersion` costs nothing today and is what lets CREDENTIAL_KEY
+// ever be rotated without a data migration.
+export const sourceCredentials = pgTable(
+  'source_credentials',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    ciphertext: bytea('ciphertext').notNull(),
+    iv: bytea('iv').notNull(),
+    authTag: bytea('auth_tag').notNull(),
+    keyVersion: integer('key_version').notNull().default(1),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check('source_credentials_kind_check', sql`${table.kind} IN ('github_pat')`),
+    // One credential per project — "re-entering a token replaces the row
+    // rather than adding a second one" (upserted by CredentialsRepository).
+    unique().on(table.projectId),
+  ],
+);
+
+export type SourceCredentialRow = typeof sourceCredentials.$inferSelect;
+export type NewSourceCredentialRow = typeof sourceCredentials.$inferInsert;

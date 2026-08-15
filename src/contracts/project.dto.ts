@@ -7,23 +7,33 @@ export class CreateProjectDto {
   @IsNotEmpty()
   name!: string;
 
-  @ApiPropertyOptional({ enum: ['local_path', 'git_url', 'zip_upload'], default: 'local_path' })
+  @ApiPropertyOptional({
+    enum: ['local_path', 'git_url', 'zip_upload', 'git_private'],
+    default: 'local_path',
+  })
   @IsOptional()
-  @IsIn(['local_path', 'git_url', 'zip_upload'])
+  @IsIn(['local_path', 'git_url', 'zip_upload', 'git_private'])
   sourceKind?: string;
 
   @ApiProperty({
     description:
-      'Absolute local folder path, an https://github.com/... URL, or (zip_upload) the uploadId from POST /uploads',
+      'Absolute local folder path, an https://github.com/... URL (git_url/git_private), or (zip_upload) the uploadId from POST /uploads',
   })
   @IsString()
   @IsNotEmpty()
   sourceRef!: string;
 
-  @ApiPropertyOptional({ description: 'git_url only — defaults to the repo’s default branch' })
+  @ApiPropertyOptional({ description: 'git_url/git_private only — defaults to the repo’s default branch' })
   @IsOptional()
   @IsString()
   branch?: string;
+
+  @ApiPropertyOptional({
+    description: 'git_private only — a GitHub PAT, encrypted at rest and never returned by the API',
+  })
+  @IsOptional()
+  @IsString()
+  token?: string;
 }
 
 export class ProjectDto {

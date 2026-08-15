@@ -38,4 +38,8 @@ export class ConfigService {
   get llmCacheEnabled(): boolean {
     return this.env.NODE_ENV !== 'production' && this.env.LLM_CACHE !== 'off';
   }
+
+  get credentialKey(): string {
+    return this.env.CREDENTIAL_KEY;
+  }
 }

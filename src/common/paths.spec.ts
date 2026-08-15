@@ -40,4 +40,10 @@ describe('resolveInside', () => {
       /escapes root/,
     );
   });
+
+  it('rejects a UNC path', () => {
+    // Phase 6's acceptance test names UNC paths explicitly in its
+    // path-traversal table, alongside `../`, `..\`, absolute, and `C:\`.
+    expect(() => resolveInside(root, '\\\\server\\share\\secret.txt')).toThrow(/escapes root/);
+  });
 });

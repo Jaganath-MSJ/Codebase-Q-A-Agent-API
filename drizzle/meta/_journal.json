@@ -120,6 +120,13 @@
       "when": 1786592839132,
       "tag": "0016_chunk_symbol",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1786781735797,
+      "tag": "0017_vengeful_eddie_brock",
+      "breakpoints": true
     }
   ]
 }

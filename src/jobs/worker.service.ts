@@ -4,6 +4,7 @@ import { IndexCanceledError, IndexingService } from '../indexing/indexing.servic
 import { ProgressReporter } from '../indexing/progress.reporter';
 import { EmbeddingQuotaExhaustedError } from '../indexing/rate-limiter';
 import { EventBusService } from '../events/event-bus.service';
+import { redactSecrets } from '../common/redact';
 import type { IndexingJobRow } from '../db/schema';
 
 const SAFETY_POLL_MS = 60_000;
@@ -97,7 +98,10 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
     const rawMessage = err instanceof Error ? err.message : String(err);
     // Postgres text columns can never store a NUL byte; strip it so a failure this
     // ugly (e.g. a source file with an embedded NUL) can still be recorded, not just logged.
-    const message = rawMessage.split(NUL_BYTE).join('');
+    // Tokens reach this point through a caught exception's own message (e.g. a git
+    // subprocess echoing a bad credential in its error text) far more often than
+    // through deliberate logging — redacted before it's ever logged or persisted.
+    const message = redactSecrets(rawMessage.split(NUL_BYTE).join(''));
     this.logger.error(`Job ${job.id} for project ${job.projectId} failed: ${message}`);
     try {
       await this.jobsRepository.markFailed(job.id, message);

@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
+import { CredentialsService } from '../credentials/credentials.service';
 import { ProjectsRepository } from '../db/repositories/projects.repository';
 import { ProjectRow } from '../db/schema';
 import { CreateProjectDto, FileViewDto } from '../contracts';
@@ -13,6 +14,7 @@ import { ConfigService } from '../config/config.service';
 export class ProjectsService {
   constructor(
     private readonly projectsRepository: ProjectsRepository,
+    private readonly credentialsService: CredentialsService,
     private readonly config: ConfigService,
   ) {}
 
@@ -40,12 +42,25 @@ export class ProjectsService {
       }
     }
 
-    return this.projectsRepository.create({
+    if (sourceKind === 'git_private' && !dto.token) {
+      throw new BadRequestException('git_private requires a token');
+    }
+
+    const project = await this.projectsRepository.create({
       name: dto.name,
       sourceKind,
       sourceRef: dto.sourceRef,
       defaultBranch: dto.branch,
     });
+
+    // Stored only after the project row exists, so the credential's FK has
+    // something to point at — the token itself is encrypted before it ever
+    // reaches CredentialsRepository, never passed through in plaintext form.
+    if (sourceKind === 'git_private') {
+      await this.credentialsService.setCredential(project.id, 'github_pat', dto.token!);
+    }
+
+    return project;
   }
 
   async findAll(): Promise<ProjectRow[]> {
