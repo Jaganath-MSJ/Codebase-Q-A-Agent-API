@@ -7,12 +7,15 @@ export class CreateProjectDto {
   @IsNotEmpty()
   name!: string;
 
-  @ApiPropertyOptional({ enum: ['local_path', 'git_url'], default: 'local_path' })
+  @ApiPropertyOptional({ enum: ['local_path', 'git_url', 'zip_upload'], default: 'local_path' })
   @IsOptional()
-  @IsIn(['local_path', 'git_url'])
+  @IsIn(['local_path', 'git_url', 'zip_upload'])
   sourceKind?: string;
 
-  @ApiProperty({ description: 'Absolute local folder path, or an https://github.com/... URL' })
+  @ApiProperty({
+    description:
+      'Absolute local folder path, an https://github.com/... URL, or (zip_upload) the uploadId from POST /uploads',
+  })
   @IsString()
   @IsNotEmpty()
   sourceRef!: string;

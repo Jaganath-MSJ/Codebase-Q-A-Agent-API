@@ -5,8 +5,17 @@ import { EventsModule } from './events/events.module';
 import { ProjectsModule } from './projects/projects.module';
 import { RetrievalModule } from './retrieval/retrieval.module';
 import { ChatModule } from './chat/chat.module';
+import { UploadsModule } from './uploads/uploads.module';
 
 @Module({
-  imports: [ConfigModule, DbModule, EventsModule, ProjectsModule, RetrievalModule, ChatModule],
+  imports: [
+    ConfigModule,
+    DbModule,
+    EventsModule,
+    ProjectsModule,
+    RetrievalModule,
+    ChatModule,
+    UploadsModule,
+  ],
 })
 export class AppModule {}
