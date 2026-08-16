@@ -230,6 +230,8 @@ export const messages = pgTable(
     inputTokens: integer('input_tokens'),
     outputTokens: integer('output_tokens'),
     latencyMs: integer('latency_ms'),
+    // Phase 7: the full agent-loop trajectory — [{tool, args, resultSummary, ms}] — null for RAG answers.
+    toolTrace: jsonb('tool_trace'),
     error: text('error'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

@@ -11,6 +11,8 @@ export interface CompleteAssistantData {
   inputTokens: number | null;
   outputTokens: number | null;
   latencyMs: number;
+  /** Phase 7: the agent loop's trajectory. Undefined/omitted for RAG answers, which leaves the column null. */
+  toolTrace?: unknown[] | null;
 }
 
 @Injectable()

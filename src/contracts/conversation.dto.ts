@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class ConversationDto {
   @ApiProperty()
@@ -72,4 +72,12 @@ export class PostMessageDto {
   @IsString()
   @IsNotEmpty()
   question!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Run the Phase 7 agent loop (search_code tool only) instead of RAG retrieval. Manual debug toggle — the Fast/Thorough router lands in 7.4.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  agentic?: boolean;
 }

@@ -7,9 +7,18 @@ import { CitationsRepository } from '../db/repositories/citations.repository';
 import type { ConversationRow, MessageRow, CitationRow, NewCitationRow } from '../db/schema';
 import { CHAT_PROVIDER_TOKEN } from '../llm/llm.module';
 import type { ChatProvider, ChatUsage } from '../llm/chat-provider.interface';
-import { buildCondensationPrompt, buildSummaryPrompt, buildUserPrompt, SYSTEM_PROMPT, type EvidenceBlock } from './prompt.builder';
+import {
+  AGENTIC_SYSTEM_PROMPT,
+  buildCondensationPrompt,
+  buildSummaryPrompt,
+  buildUserPrompt,
+  SYSTEM_PROMPT,
+  type EvidenceBlock,
+} from './prompt.builder';
 import { parseCitations, type Citation } from '../common/citation-parser';
 import { evictedExchanges, recentWindow, toExchanges, truncateAnswer, type Exchange } from './conversation-context';
+import { runAgentLoop } from './agent.loop';
+import { ToolRegistry } from '../tools/tool.registry';
 
 const TOP_K = 10;
 const TITLE_MAX_LENGTH = 80;
@@ -35,6 +44,7 @@ export type ChatSseEvent =
   | { type: 'status'; data: { stage: 'condensing' | 'retrieving' | 'generating' } }
   | { type: 'sources'; data: { sources: SourceRef[] } }
   | { type: 'token'; data: { delta: string } }
+  | { type: 'tool'; data: { name: string; args: unknown } }
   | {
       type: 'done';
       data: { messageId: string; citations: Citation[]; usage: ChatUsage; latencyMs: number };
@@ -49,6 +59,7 @@ export class ChatService {
     private readonly conversationsRepository: ConversationsRepository,
     private readonly messagesRepository: MessagesRepository,
     private readonly citationsRepository: CitationsRepository,
+    private readonly toolRegistry: ToolRegistry,
     @Inject(CHAT_PROVIDER_TOKEN) private readonly chatProvider: ChatProvider,
   ) {}
 
@@ -247,6 +258,109 @@ export class ChatService {
         );
       } catch {
         // ignore — title/updatedAt/summary are cosmetic, not correctness-critical
+      }
+    } catch (err) {
+      if (signal.aborted) {
+        await this.messagesRepository.updateContent(assistantMessage.id, buffer);
+        return;
+      }
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      await this.messagesRepository.markError(assistantMessage.id, buffer, message);
+      yield { type: 'error', data: { messageId: assistantMessage.id, message } };
+    }
+  }
+
+  /**
+   * Runs the Phase 7 agent loop instead of RAG retrieval: no condensation, no
+   * upfront `search`, no evidence-ledger citations yet (7.3) — the model
+   * fetches its own evidence via `search_code` and the answer is plain text.
+   * Manual debug toggle ahead of the 7.4 router; mirrors `streamMessage`'s
+   * message-row lifecycle so both paths are indistinguishable in storage.
+   */
+  async *streamAgenticMessage(
+    conversationId: string,
+    question: string,
+    signal: AbortSignal,
+  ): AsyncGenerator<ChatSseEvent> {
+    const conversation = await this.requireConversation(conversationId);
+    const { userMessage, assistantMessage } = await this.messagesRepository.createTurn(
+      conversationId,
+      question,
+    );
+
+    yield {
+      type: 'message_created',
+      data: { userMessageId: userMessage.id, assistantMessageId: assistantMessage.id },
+    };
+
+    let buffer = '';
+    const startedAt = Date.now();
+    try {
+      yield { type: 'status', data: { stage: 'generating' } };
+      await this.messagesRepository.markStreaming(assistantMessage.id);
+
+      let usage: ChatUsage = {};
+      let trace: unknown[] = [];
+      let stopReason: string = 'stop';
+      let lastFlushAt = startedAt;
+
+      for await (const event of runAgentLoop(
+        this.chatProvider,
+        this.toolRegistry,
+        conversation.projectId,
+        AGENTIC_SYSTEM_PROMPT,
+        question,
+        signal,
+      )) {
+        if (event.type === 'text') {
+          buffer += event.delta;
+          yield { type: 'token', data: { delta: event.delta } };
+          if (Date.now() - lastFlushAt >= FLUSH_INTERVAL_MS) {
+            await this.messagesRepository.updateContent(assistantMessage.id, buffer);
+            lastFlushAt = Date.now();
+          }
+        } else if (event.type === 'tool_call') {
+          yield { type: 'tool', data: { name: event.name, args: event.args } };
+        } else if (event.type === 'done') {
+          usage = event.usage;
+          trace = event.trace;
+          stopReason = event.stopReason;
+        }
+      }
+
+      if (signal.aborted) {
+        await this.messagesRepository.updateContent(assistantMessage.id, buffer);
+        return;
+      }
+
+      // The budget fallback to a RAG answer is 7.4's job — for now, be
+      // honest rather than silently persisting an empty answer.
+      if (stopReason === 'budget_exhausted' && !buffer.trim()) {
+        buffer = 'No answer — the tool-call budget was exhausted before the model produced a response.';
+      }
+
+      const latencyMs = Date.now() - startedAt;
+      const [providerName, ...modelParts] = this.chatProvider.id.split(':');
+
+      await this.messagesRepository.completeAssistant(assistantMessage.id, {
+        content: buffer,
+        provider: providerName ?? this.chatProvider.id,
+        model: modelParts.length > 0 ? modelParts.join(':') : null,
+        inputTokens: usage.inputTokens ?? null,
+        outputTokens: usage.outputTokens ?? null,
+        latencyMs,
+        toolTrace: trace,
+      });
+
+      yield { type: 'done', data: { messageId: assistantMessage.id, citations: [], usage, latencyMs } };
+
+      try {
+        if (!conversation.title) {
+          await this.conversationsRepository.setTitle(conversationId, question.slice(0, TITLE_MAX_LENGTH));
+        }
+        await this.conversationsRepository.touch(conversationId);
+      } catch {
+        // ignore — title/updatedAt bookkeeping is cosmetic, not correctness-critical
       }
     } catch (err) {
       if (signal.aborted) {

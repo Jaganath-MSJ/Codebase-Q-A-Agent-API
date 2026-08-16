@@ -24,6 +24,16 @@ export const SYSTEM_PROMPT = [
   'Quote at most 5 lines.',
 ].join(' ');
 
+// No `[n]` markers here — the evidence ledger that makes those citations
+// clickable is Phase 7.3. Until then, an agentic answer references code by
+// its exact path and line range, taken verbatim from the tool result.
+export const AGENTIC_SYSTEM_PROMPT = [
+  'You are investigating a codebase using the tools available to you.',
+  'Call search_code to locate relevant code before answering — never guess at file contents or line numbers.',
+  'When you reference code, give its exact file path and line range exactly as shown in the tool result.',
+  'Answer as soon as you have enough evidence; do not call tools you do not need.',
+].join(' ');
+
 function formatExchanges(exchanges: RecentExchange[]): string {
   return exchanges.map((ex) => `Q: ${ex.question}\nA: ${ex.answer}`).join('\n\n');
 }

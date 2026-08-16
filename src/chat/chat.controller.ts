@@ -85,7 +85,9 @@ export class ChatController {
     const abortController = new AbortController();
     res.on('close', () => abortController.abort());
 
-    const events = this.chatService.streamMessage(id, dto.question, abortController.signal);
+    const events = dto.agentic
+      ? this.chatService.streamAgenticMessage(id, dto.question, abortController.signal)
+      : this.chatService.streamMessage(id, dto.question, abortController.signal);
     const first = await events.next();
 
     res.writeHead(HttpStatus.OK, {

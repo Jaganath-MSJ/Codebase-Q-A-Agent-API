@@ -127,6 +127,13 @@
       "when": 1786781735797,
       "tag": "0017_vengeful_eddie_brock",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1786800050078,
+      "tag": "0018_agentic_search_tool_trace",
+      "breakpoints": true
     }
   ]
 }

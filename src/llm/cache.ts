@@ -1,7 +1,22 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { sha256 } from '../common/hash';
-import type { ChatCompletion, ChatEvent, ChatProvider, ChatRequest, ChatUsage } from './chat-provider.interface';
+import type {
+  ChatCompletion,
+  ChatEvent,
+  ChatProvider,
+  ChatRequest,
+  ChatStopReason,
+  ChatUsage,
+  ToolCall,
+} from './chat-provider.interface';
+
+interface CachedStream {
+  text: string;
+  usage: ChatUsage;
+  toolCalls: ToolCall[];
+  stopReason: ChatStopReason;
+}
 
 export class CachingChatProvider implements ChatProvider {
   readonly id: string;
@@ -37,15 +52,15 @@ export class CachingChatProvider implements ChatProvider {
     const cachePath = this.cachePath(req);
 
     try {
-      const cached = await readFile(cachePath, 'utf8');
-      const result = JSON.parse(cached) as ChatCompletion;
-      if (result.text) yield { type: 'text', delta: result.text };
+      const cached = JSON.parse(await readFile(cachePath, 'utf8')) as CachedStream;
+      if (cached.text) yield { type: 'text', delta: cached.text };
+      for (const call of cached.toolCalls) yield { type: 'tool_call', ...call };
       yield {
         type: 'usage',
-        inputTokens: result.usage.inputTokens ?? 0,
-        outputTokens: result.usage.outputTokens ?? 0,
+        inputTokens: cached.usage.inputTokens ?? 0,
+        outputTokens: cached.usage.outputTokens ?? 0,
       };
-      yield { type: 'done', stopReason: 'stop' };
+      yield { type: 'done', stopReason: cached.stopReason };
       return;
     } catch {
       // cache miss
@@ -53,20 +68,34 @@ export class CachingChatProvider implements ChatProvider {
 
     let text = '';
     let usage: ChatUsage = {};
+    const toolCalls: ToolCall[] = [];
+    let stopReason: ChatStopReason = 'stop';
+
     for await (const event of this.inner.stream(req, signal)) {
       if (event.type === 'text') text += event.delta;
+      if (event.type === 'tool_call') {
+        toolCalls.push({ id: event.id, name: event.name, args: event.args, providerData: event.providerData });
+      }
       if (event.type === 'usage') usage = { inputTokens: event.inputTokens, outputTokens: event.outputTokens };
+      if (event.type === 'done') stopReason = event.stopReason;
       yield event;
     }
 
     if (!signal?.aborted) {
       await mkdir(this.cacheDir, { recursive: true });
-      await writeFile(cachePath, JSON.stringify({ text, usage } satisfies ChatCompletion));
+      await writeFile(cachePath, JSON.stringify({ text, usage, toolCalls, stopReason } satisfies CachedStream));
     }
   }
 
+  // Includes `tools`/`priorTurns` so every step of an agent loop — which
+  // shares the same top-level system+user but differs in what happened
+  // since — gets its own cache entry. Both are undefined for every existing
+  // single-turn caller (condense/summarize/RAG), so their cache keys are
+  // byte-identical to before this change.
   private cachePath(req: ChatRequest): string {
-    const key = sha256(`${this.id}\x00${req.system}\x00${req.user}`);
+    const key = sha256(
+      `${this.id}\x00${req.system}\x00${req.user}\x00${JSON.stringify(req.tools ?? null)}\x00${JSON.stringify(req.priorTurns ?? null)}`,
+    );
     return path.join(this.cacheDir, `${key}.json`);
   }
 }
