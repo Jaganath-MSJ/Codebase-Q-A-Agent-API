@@ -1,5 +1,6 @@
 import type { ToolDefinition } from '../../llm/chat-provider.interface';
 import type { RetrievalMode, RetrievalService } from '../../retrieval/retrieval.service';
+import type { ToolExecutionResult } from '../tool-executor.interface';
 
 export const SEARCH_CODE_TOOL: ToolDefinition = {
   name: 'search_code',
@@ -20,22 +21,22 @@ export const SEARCH_CODE_TOOL: ToolDefinition = {
   },
 };
 
-/** Formats results as plain path:line references — no `[n]` markers yet, since the evidence ledger is Phase 7.3. */
+/** Every result becomes an evidence-ledger region — the caller assigns `[n]` markers, not this function. */
 export async function searchCodeTool(
   retrievalService: RetrievalService,
   projectId: string,
   args: Record<string, unknown>,
-): Promise<string> {
+): Promise<ToolExecutionResult> {
   const query = typeof args.query === 'string' ? args.query.trim() : '';
-  if (!query) return 'Error: search_code requires a non-empty "query" string argument.';
+  if (!query) return { regions: [], note: 'Error: search_code requires a non-empty "query" string argument.' };
 
   const mode: RetrievalMode = args.mode === 'exact' ? 'fts' : 'hybrid';
   const limit = typeof args.limit === 'number' && args.limit > 0 ? Math.min(Math.floor(args.limit), 20) : 10;
 
   const results = await retrievalService.search(projectId, query, mode, limit);
-  if (results.length === 0) return 'No results.';
+  if (results.length === 0) return { regions: [], note: 'No results.' };
 
-  return results
-    .map((r, i) => `${i + 1}. ${r.path}:${r.startLine}-${r.endLine} (score ${r.score.toFixed(3)})\n${r.content}`)
-    .join('\n\n');
+  return {
+    regions: results.map((r) => ({ path: r.path, startLine: r.startLine, endLine: r.endLine, content: r.content })),
+  };
 }

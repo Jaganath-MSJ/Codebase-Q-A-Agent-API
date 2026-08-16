@@ -1,5 +1,6 @@
 import type { ChatProvider, ChatStopReason, ChatUsage, PriorTurn, ToolCall, ToolResultTurn } from '../llm/chat-provider.interface';
-import type { ToolExecutor } from '../tools/tool.registry';
+import type { ToolExecutor } from '../tools/tool-executor.interface';
+import { type EvidenceEntry, formatEvidenceEntry, recordEvidence } from './evidence-ledger';
 
 // Cap it at 8 steps from the very first run — an unbounded loop against a
 // free tier on its first outing is how you lose a day's quota in minutes.
@@ -30,6 +31,7 @@ export type AgentEvent =
       trace: AgentTraceEntry[];
       usage: ChatUsage;
       stopReason: AgentStopReason;
+      evidence: EvidenceEntry[];
     };
 
 function truncate(text: string, max: number): string {
@@ -57,6 +59,7 @@ export async function* runAgentLoop(
 
   const priorTurns: PriorTurn[] = [];
   const trace: AgentTraceEntry[] = [];
+  let evidence: EvidenceEntry[] = [];
   let usage: ChatUsage = { inputTokens: 0, outputTokens: 0 };
   let totalTokens = 0;
   let finalText = '';
@@ -91,17 +94,17 @@ export async function* runAgentLoop(
 
     finalText += stepText;
     if (signal.aborted) {
-      yield { type: 'done', text: finalText, trace, usage, stopReason: 'error' };
+      yield { type: 'done', text: finalText, trace, usage, stopReason: 'error', evidence };
       return;
     }
 
     if (stopReason !== 'tool_use' || pendingCalls.length === 0) {
-      yield { type: 'done', text: finalText, trace, usage, stopReason };
+      yield { type: 'done', text: finalText, trace, usage, stopReason, evidence };
       return;
     }
 
     if (totalTokens >= MAX_TOTAL_TOKENS) {
-      yield { type: 'done', text: finalText, trace, usage, stopReason: 'budget_exhausted' };
+      yield { type: 'done', text: finalText, trace, usage, stopReason: 'budget_exhausted', evidence };
       return;
     }
 
@@ -111,12 +114,21 @@ export async function* runAgentLoop(
     for (const call of pendingCalls) {
       yield { type: 'tool_call', name: call.name, args: call.args };
       const startedAt = Date.now();
-      const result = truncate(await toolRegistry.execute(projectId, call), TOOL_RESULT_TRUNCATE_CHARS);
-      trace.push({ tool: call.name, args: call.args, resultSummary: result, ms: Date.now() - startedAt });
-      results.push({ toolCallId: call.id, name: call.name, content: result });
+      const { regions, note } = await toolRegistry.execute(projectId, call);
+
+      // Every region becomes a numbered evidence-ledger entry — markers stay
+      // sequential across the whole trajectory, not reset per call.
+      const created = recordEvidence(evidence, regions);
+      evidence = [...evidence, ...created];
+
+      const rendered = [created.map(formatEvidenceEntry).join('\n\n'), note].filter(Boolean).join('\n\n');
+      const text = truncate(rendered || 'No output.', TOOL_RESULT_TRUNCATE_CHARS);
+
+      trace.push({ tool: call.name, args: call.args, resultSummary: text, ms: Date.now() - startedAt });
+      results.push({ toolCallId: call.id, name: call.name, content: text });
     }
     priorTurns.push({ role: 'tool', results });
   }
 
-  yield { type: 'done', text: finalText, trace, usage, stopReason: 'budget_exhausted' };
+  yield { type: 'done', text: finalText, trace, usage, stopReason: 'budget_exhausted', evidence };
 }

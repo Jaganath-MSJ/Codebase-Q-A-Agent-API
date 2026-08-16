@@ -18,6 +18,7 @@ import {
 import { parseCitations, type Citation } from '../common/citation-parser';
 import { evictedExchanges, recentWindow, toExchanges, truncateAnswer, type Exchange } from './conversation-context';
 import { runAgentLoop } from './agent.loop';
+import type { EvidenceEntry } from './evidence-ledger';
 import { ToolRegistry } from '../tools/tool.registry';
 
 const TOP_K = 10;
@@ -272,10 +273,13 @@ export class ChatService {
 
   /**
    * Runs the Phase 7 agent loop instead of RAG retrieval: no condensation, no
-   * upfront `search`, no evidence-ledger citations yet (7.3) — the model
-   * fetches its own evidence via `search_code` and the answer is plain text.
-   * Manual debug toggle ahead of the 7.4 router; mirrors `streamMessage`'s
-   * message-row lifecycle so both paths are indistinguishable in storage.
+   * upfront `search` — the model fetches its own evidence via tool calls, and
+   * every concrete region it observes (a `search_code` snippet, a `read_file`
+   * range) becomes a numbered evidence-ledger entry. Citations are parsed and
+   * persisted exactly like the RAG path, just sourced from the ledger instead
+   * of a retrieval pass. Manual debug toggle ahead of the 7.4 router; mirrors
+   * `streamMessage`'s message-row lifecycle so both paths are
+   * indistinguishable in storage.
    */
   async *streamAgenticMessage(
     conversationId: string,
@@ -302,6 +306,7 @@ export class ChatService {
       let usage: ChatUsage = {};
       let trace: unknown[] = [];
       let stopReason: string = 'stop';
+      let evidence: EvidenceEntry[] = [];
       let lastFlushAt = startedAt;
 
       for await (const event of runAgentLoop(
@@ -325,6 +330,7 @@ export class ChatService {
           usage = event.usage;
           trace = event.trace;
           stopReason = event.stopReason;
+          evidence = event.evidence;
         }
       }
 
@@ -339,6 +345,7 @@ export class ChatService {
         buffer = 'No answer — the tool-call budget was exhausted before the model produced a response.';
       }
 
+      const citations = parseCitations(buffer, evidence);
       const latencyMs = Date.now() - startedAt;
       const [providerName, ...modelParts] = this.chatProvider.id.split(':');
 
@@ -352,7 +359,27 @@ export class ChatService {
         toolTrace: trace,
       });
 
-      yield { type: 'done', data: { messageId: assistantMessage.id, citations: [], usage, latencyMs } };
+      // Every ledger entry gets a row, cited or not — same "Sources panel
+      // shows what got ignored" guarantee as the RAG path, just sourced from
+      // tool calls instead of an upfront retrieval pass. No chunkId/score:
+      // a read_file range has no backing chunk row at all, and a search_code
+      // hit's chunk metadata isn't needed for the citation to be clickable.
+      const citedMarkers = new Set(citations.map((c) => c.marker));
+      const citationRows: NewCitationRow[] = evidence.map((e) => ({
+        messageId: assistantMessage.id,
+        marker: e.marker,
+        chunkId: null,
+        filePath: e.path,
+        startLine: e.startLine,
+        endLine: e.endLine,
+        contentHash: null,
+        score: null,
+        retrievalRank: null,
+        used: citedMarkers.has(e.marker),
+      }));
+      await this.citationsRepository.insertMany(citationRows);
+
+      yield { type: 'done', data: { messageId: assistantMessage.id, citations, usage, latencyMs } };
 
       try {
         if (!conversation.title) {

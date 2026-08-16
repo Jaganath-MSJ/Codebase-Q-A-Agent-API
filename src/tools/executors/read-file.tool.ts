@@ -1,5 +1,6 @@
 import type { ToolDefinition } from '../../llm/chat-provider.interface';
 import type { ProjectsRepository } from '../../db/repositories/projects.repository';
+import type { ToolExecutionResult } from '../tool-executor.interface';
 import { resolveInside } from '../../common/paths';
 import { readSourceFile } from '../../common/read-file';
 
@@ -31,37 +32,39 @@ export async function readFileTool(
   projectsRepository: ProjectsRepository,
   projectId: string,
   args: Record<string, unknown>,
-): Promise<string> {
+): Promise<ToolExecutionResult> {
   const relPath = typeof args.path === 'string' ? args.path.trim() : '';
-  if (!relPath) return 'Error: read_file requires a non-empty "path" string argument.';
+  if (!relPath) return { regions: [], note: 'Error: read_file requires a non-empty "path" string argument.' };
 
   const project = await projectsRepository.findById(projectId);
-  if (!project) return `Error: project ${projectId} not found.`;
+  if (!project) return { regions: [], note: `Error: project ${projectId} not found.` };
 
   const root = project.workspacePath ?? project.sourceRef;
   let absPath: string;
   try {
     absPath = resolveInside(root, relPath);
   } catch {
-    return `Error: path escapes the project workspace: ${relPath}`;
+    return { regions: [], note: `Error: path escapes the project workspace: ${relPath}` };
   }
 
   let lines: string[];
   try {
     ({ lines } = await readSourceFile(absPath));
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return `Error: file not found: ${relPath}`;
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { regions: [], note: `Error: file not found: ${relPath}` };
+    }
     throw err;
   }
 
   const start = Math.max(1, typeof args.startLine === 'number' ? Math.floor(args.startLine) : 1);
   if (start > lines.length) {
-    return `Error: startLine ${start} is past the end of the file (${lines.length} lines).`;
+    return { regions: [], note: `Error: startLine ${start} is past the end of the file (${lines.length} lines).` };
   }
 
   const requestedEnd =
     typeof args.endLine === 'number' ? Math.floor(args.endLine) : start + DEFAULT_WINDOW_LINES - 1;
   const end = Math.min(lines.length, requestedEnd);
 
-  return `${relPath}:${start}-${end}\n${lines.slice(start - 1, end).join('\n')}`;
+  return { regions: [{ path: relPath, startLine: start, endLine: end, content: lines.slice(start - 1, end).join('\n') }] };
 }

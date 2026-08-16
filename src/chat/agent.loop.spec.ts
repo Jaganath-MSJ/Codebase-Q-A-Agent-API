@@ -4,16 +4,18 @@ import type {
   ChatCompletion,
   ChatEvent,
   ChatProvider,
+  ChatRequest,
   ToolCall,
   ToolDefinition,
 } from '../llm/chat-provider.interface';
-import type { ToolExecutor } from '../tools/tool.registry';
+import type { ToolExecutionResult, ToolExecutor } from '../tools/tool-executor.interface';
 
 class ScriptedChatProvider implements ChatProvider {
   readonly id = 'scripted:test';
   readonly contextWindow = 100_000;
   readonly supportsTools: boolean;
   step = 0;
+  receivedRequests: ChatRequest[] = [];
 
   constructor(
     private readonly scriptFor: (step: number) => ChatEvent[],
@@ -22,7 +24,8 @@ class ScriptedChatProvider implements ChatProvider {
     this.supportsTools = supportsTools;
   }
 
-  async *stream(): AsyncIterable<ChatEvent> {
+  async *stream(req: ChatRequest): AsyncIterable<ChatEvent> {
+    this.receivedRequests.push(req);
     const events = this.scriptFor(this.step);
     this.step++;
     for (const event of events) yield event;
@@ -39,9 +42,22 @@ class FakeToolExecutor implements ToolExecutor {
   ];
   calls: ToolCall[] = [];
 
-  async execute(_projectId: string, call: ToolCall): Promise<string> {
+  async execute(_projectId: string, call: ToolCall): Promise<ToolExecutionResult> {
     this.calls.push(call);
-    return `result for ${call.name}`;
+    return { regions: [], note: `result for ${call.name}` };
+  }
+}
+
+/** Returns one fresh, distinct region per call — for evidence-ledger marker tests. */
+class RegionToolExecutor implements ToolExecutor {
+  readonly definitions: ToolDefinition[] = [
+    { name: 'search_code', description: 'test tool', parameters: {} },
+  ];
+  calls = 0;
+
+  async execute(): Promise<ToolExecutionResult> {
+    this.calls++;
+    return { regions: [{ path: `src/${this.calls}.ts`, startLine: 1, endLine: 1, content: `content ${this.calls}` }] };
   }
 }
 
@@ -66,7 +82,7 @@ describe('runAgentLoop', () => {
 
     const done = events.at(-1);
     expect(done).toEqual(
-      expect.objectContaining({ type: 'done', text: 'The answer.', stopReason: 'stop' }),
+      expect.objectContaining({ type: 'done', text: 'The answer.', stopReason: 'stop', evidence: [] }),
     );
     expect(tools.calls).toHaveLength(0);
     expect(provider.step).toBe(1);
@@ -141,5 +157,59 @@ describe('runAgentLoop', () => {
     await expect(
       drain(runAgentLoop(provider, tools, 'proj-1', 'system', 'question', new AbortController().signal)),
     ).rejects.toThrow(/does not support tool calling/);
+  });
+
+  it('records every tool-surfaced region in the evidence ledger and renders [n] blocks back to the model', async () => {
+    const provider = new ScriptedChatProvider((step) =>
+      step === 0
+        ? [{ type: 'tool_call', id: 'call-1', name: 'search_code', args: { query: 'x' } }, { type: 'done', stopReason: 'tool_use' }]
+        : [{ type: 'text', delta: 'Done.' }, { type: 'done', stopReason: 'stop' }],
+    );
+    class TwoRegionToolExecutor implements ToolExecutor {
+      readonly definitions: ToolDefinition[] = [{ name: 'search_code', description: 'test', parameters: {} }];
+      async execute(): Promise<ToolExecutionResult> {
+        return {
+          regions: [
+            { path: 'src/a.ts', startLine: 1, endLine: 3, content: 'a' },
+            { path: 'src/b.ts', startLine: 5, endLine: 7, content: 'b' },
+          ],
+        };
+      }
+    }
+
+    const events = await drain(
+      runAgentLoop(provider, new TwoRegionToolExecutor(), 'proj-1', 'system', 'question', new AbortController().signal),
+    );
+
+    const done = events.at(-1) as { evidence: unknown };
+    expect(done.evidence).toEqual([
+      { path: 'src/a.ts', startLine: 1, endLine: 3, content: 'a', marker: 1 },
+      { path: 'src/b.ts', startLine: 5, endLine: 7, content: 'b', marker: 2 },
+    ]);
+
+    // The next model call must see the rendered [n] blocks, not raw unmarkered content.
+    const secondRequest = provider.receivedRequests[1]!;
+    const toolTurn = secondRequest.priorTurns?.find((t) => t.role === 'tool');
+    expect(toolTurn && 'results' in toolTurn ? toolTurn.results[0]?.content : undefined).toContain(
+      '[1] src/a.ts:1-3',
+    );
+    expect(toolTurn && 'results' in toolTurn ? toolTurn.results[0]?.content : undefined).toContain(
+      '[2] src/b.ts:5-7',
+    );
+  });
+
+  it('keeps markers sequential across multiple steps, not reset per tool call', async () => {
+    const provider = new ScriptedChatProvider((step) =>
+      step < 2
+        ? [{ type: 'tool_call', id: `call-${step}`, name: 'search_code', args: {} }, { type: 'done', stopReason: 'tool_use' }]
+        : [{ type: 'text', delta: 'Done.' }, { type: 'done', stopReason: 'stop' }],
+    );
+
+    const events = await drain(
+      runAgentLoop(provider, new RegionToolExecutor(), 'proj-1', 'system', 'question', new AbortController().signal),
+    );
+
+    const done = events.at(-1) as { evidence: { marker: number }[] };
+    expect(done.evidence.map((e) => e.marker)).toEqual([1, 2]);
   });
 });
