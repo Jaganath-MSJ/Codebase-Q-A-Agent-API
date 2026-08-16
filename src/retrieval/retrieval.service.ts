@@ -6,6 +6,7 @@ import { VectorRetriever, ScoredChunk } from './vector.retriever';
 import { FtsRetriever } from './fts.retriever';
 import { TrigramRetriever } from './trigram.retriever';
 import { HybridRetriever } from './hybrid.retriever';
+import { ReferencesRetriever } from './references.retriever';
 import { extractIdentifierTokens } from './identifiers';
 
 export type RetrievalMode = 'vector' | 'fts' | 'trigram' | 'hybrid';
@@ -18,6 +19,7 @@ export class RetrievalService {
     private readonly ftsRetriever: FtsRetriever,
     private readonly trigramRetriever: TrigramRetriever,
     private readonly hybridRetriever: HybridRetriever,
+    private readonly referencesRetriever: ReferencesRetriever,
     @Inject(EMBEDDING_PROVIDER_TOKEN) private readonly embeddingProvider: EmbeddingProvider,
   ) {}
 
@@ -65,5 +67,19 @@ export class RetrievalService {
     }
 
     return this.vectorRetriever.search(projectId, queryVector, limit);
+  }
+
+  /** Exact identifier match, grouped by file by the caller — see `ReferencesRetriever`. */
+  async findReferences(projectId: string, symbol: string): Promise<ScoredChunk[]> {
+    const project = await this.projectsRepository.findById(projectId);
+    if (!project) throw new NotFoundException(`Project ${projectId} not found`);
+
+    if (project.status !== 'ready') {
+      throw new BadRequestException(
+        `Project '${project.name}' is not ready for search (status: ${project.status}). Index it first.`,
+      );
+    }
+
+    return this.referencesRetriever.findReferences(projectId, symbol);
   }
 }
