@@ -4,7 +4,15 @@ import { ProjectsService } from './projects.service';
 import { JobsService } from '../jobs/jobs.service';
 import { IndexingService } from '../indexing/indexing.service';
 import { toJobDto } from '../jobs/jobs.controller';
-import { CreateProjectDto, ProjectDto, JobDto, FileQueryDto, FileViewDto, IndexRequestDto } from '../contracts';
+import {
+  CreateProjectDto,
+  ProjectDto,
+  JobDto,
+  FileQueryDto,
+  FileViewDto,
+  IndexRequestDto,
+  ProjectStorageDto,
+} from '../contracts';
 import { ProjectRow } from '../db/schema';
 
 function toDto(row: ProjectRow): ProjectDto {
@@ -63,6 +71,12 @@ export class ProjectsController {
       query.endLine,
       query.context ?? 20,
     );
+  }
+
+  @Get(':id/storage')
+  @ApiOkResponse({ type: ProjectStorageDto })
+  async getStorage(@Param('id') id: string): Promise<ProjectStorageDto> {
+    return this.projectsService.getStorage(id);
   }
 
   @Delete(':id')

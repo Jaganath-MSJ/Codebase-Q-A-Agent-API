@@ -12,6 +12,7 @@ import { ConversationsRepository } from './repositories/conversations.repository
 import { MessagesRepository } from './repositories/messages.repository';
 import { CitationsRepository } from './repositories/citations.repository';
 import { CredentialsRepository } from './repositories/credentials.repository';
+import { StorageRepository } from './repositories/storage.repository';
 import { DB_TOKEN, PG_POOL_TOKEN } from './tokens';
 
 @Global()
@@ -35,6 +36,7 @@ import { DB_TOKEN, PG_POOL_TOKEN } from './tokens';
     MessagesRepository,
     CitationsRepository,
     CredentialsRepository,
+    StorageRepository,
   ],
   exports: [
     DB_TOKEN,
@@ -46,6 +48,7 @@ import { DB_TOKEN, PG_POOL_TOKEN } from './tokens';
     MessagesRepository,
     CitationsRepository,
     CredentialsRepository,
+    StorageRepository,
   ],
 })
 export class DbModule implements OnModuleInit {

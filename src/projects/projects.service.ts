@@ -3,18 +3,24 @@ import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { CredentialsService } from '../credentials/credentials.service';
 import { ProjectsRepository } from '../db/repositories/projects.repository';
+import { StorageRepository } from '../db/repositories/storage.repository';
 import { ProjectRow } from '../db/schema';
-import { CreateProjectDto, FileViewDto } from '../contracts';
+import { CreateProjectDto, FileViewDto, ProjectStorageDto } from '../contracts';
 import { resolveInside } from '../common/paths';
 import { readSourceFile } from '../common/read-file';
 import { resolveUploadPath } from '../common/upload-id';
 import { ConfigService } from '../config/config.service';
+
+// Neon's free tier, per docs/architecture.md and the "Postgres is 0.5 GB"
+// invariant — the number the storage report measures usage against.
+const DATABASE_BUDGET_BYTES = 512 * 1024 * 1024;
 
 @Injectable()
 export class ProjectsService {
   constructor(
     private readonly projectsRepository: ProjectsRepository,
     private readonly credentialsService: CredentialsService,
+    private readonly storageRepository: StorageRepository,
     private readonly config: ConfigService,
   ) {}
 
@@ -65,6 +71,26 @@ export class ProjectsService {
 
   async findAll(): Promise<ProjectRow[]> {
     return this.projectsRepository.findAll();
+  }
+
+  async getStorage(projectId: string): Promise<ProjectStorageDto> {
+    const project = await this.projectsRepository.findById(projectId);
+    if (!project) throw new NotFoundException(`Project ${projectId} not found`);
+
+    const [{ chunkCount, contentBytes, vectorBytes }, { databaseBytes, chunksIndexBytes }] = await Promise.all([
+      this.storageRepository.getProjectBytes(projectId),
+      this.storageRepository.getDatabaseTotals(),
+    ]);
+
+    return {
+      chunkCount,
+      contentBytes,
+      vectorBytes,
+      sharedIndexBytes: chunksIndexBytes,
+      databaseBytes,
+      databaseBudgetBytes: DATABASE_BUDGET_BYTES,
+      databaseUsedPercent: (databaseBytes / DATABASE_BUDGET_BYTES) * 100,
+    };
   }
 
   /**
