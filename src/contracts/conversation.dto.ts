@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class ConversationDto {
   @ApiProperty()
@@ -74,10 +74,11 @@ export class PostMessageDto {
   question!: string;
 
   @ApiPropertyOptional({
+    enum: ['auto', 'fast', 'thorough'],
     description:
-      'Run the Phase 7 agent loop (search_code tool only) instead of RAG retrieval. Manual debug toggle — the Fast/Thorough router lands in 7.4.',
+      '"fast" (RAG) or "thorough" (the Phase 7 agent loop) forces that mode; "auto" or omitted lets the heuristic router decide from the question text.',
   })
   @IsOptional()
-  @IsBoolean()
-  agentic?: boolean;
+  @IsIn(['auto', 'fast', 'thorough'])
+  mode?: 'auto' | 'fast' | 'thorough';
 }

@@ -41,7 +41,10 @@ export interface MessageWithCitations extends MessageRow {
 }
 
 export type ChatSseEvent =
-  | { type: 'message_created'; data: { userMessageId: string; assistantMessageId: string } }
+  | {
+      type: 'message_created';
+      data: { userMessageId: string; assistantMessageId: string; resolvedMode?: 'fast' | 'thorough' };
+    }
   | { type: 'status'; data: { stage: 'condensing' | 'retrieving' | 'generating' } }
   | { type: 'sources'; data: { sources: SourceRef[] } }
   | { type: 'token'; data: { delta: string } }
@@ -90,11 +93,13 @@ export class ChatService {
   }
 
   /**
-   * Streams one turn of the conversation as a sequence of SSE-ready events.
-   * The assistant row is created 'pending' before any retrieval or generation
-   * happens, so a client that disconnects mid-answer leaves a recoverable
-   * partial row ('streaming' + whatever content was flushed) rather than
-   * nothing at all — the caller aborts `signal` on disconnect.
+   * Streams one turn of the conversation (RAG/"Fast" path) as a sequence of
+   * SSE-ready events. The assistant row is created 'pending' before any
+   * retrieval or generation happens, so a client that disconnects mid-answer
+   * leaves a recoverable partial row ('streaming' + whatever content was
+   * flushed) rather than nothing at all — the caller aborts `signal` on
+   * disconnect. The actual generation is `generateRagAnswer`, shared with
+   * `streamAgenticMessage`'s budget-exhaustion fallback.
    */
   async *streamMessage(
     conversationId: string,
@@ -102,7 +107,39 @@ export class ChatService {
     signal: AbortSignal,
   ): AsyncGenerator<ChatSseEvent> {
     const conversation = await this.requireConversation(conversationId);
-    const project = await this.projectsRepository.findById(conversation.projectId);
+    const { userMessage, assistantMessage } = await this.messagesRepository.createTurn(
+      conversationId,
+      question,
+    );
+
+    yield {
+      type: 'message_created',
+      data: { userMessageId: userMessage.id, assistantMessageId: assistantMessage.id },
+    };
+
+    const priorExchanges = await this.computePriorExchanges(conversationId);
+    yield* this.generateRagAnswer(conversation, userMessage, assistantMessage, question, priorExchanges, signal);
+  }
+
+  /**
+   * Runs the Phase 7 agent loop instead of RAG retrieval: no condensation, no
+   * upfront `search` — the model fetches its own evidence via tool calls, and
+   * every concrete region it observes (a `search_code` snippet, a `read_file`
+   * range) becomes a numbered evidence-ledger entry. Citations are parsed and
+   * persisted exactly like the RAG path, just sourced from the ledger instead
+   * of a retrieval pass.
+   *
+   * On budget exhaustion, falls back to `generateRagAnswer` on the SAME
+   * assistant row rather than erroring or apologizing — a slightly worse
+   * answer beats no answer, and the exhausted trajectory's `tool_trace` is
+   * still preserved for debugging even though the final content is RAG's.
+   */
+  async *streamAgenticMessage(
+    conversationId: string,
+    question: string,
+    signal: AbortSignal,
+  ): AsyncGenerator<ChatSseEvent> {
+    const conversation = await this.requireConversation(conversationId);
     const { userMessage, assistantMessage } = await this.messagesRepository.createTurn(
       conversationId,
       question,
@@ -114,14 +151,140 @@ export class ChatService {
     };
 
     let buffer = '';
+    const startedAt = Date.now();
     try {
-      // The pair just inserted is always the newest two rows — everything
-      // before them is prior turns to condense/summarize against. Only a
-      // successfully completed turn is trustworthy context.
-      const allMessages = await this.messagesRepository.findAllByConversation(conversationId);
-      const priorExchanges = toExchanges(allMessages.slice(0, -2)).filter(
-        (ex) => ex.answerStatus === 'complete',
-      );
+      yield { type: 'status', data: { stage: 'generating' } };
+      await this.messagesRepository.markStreaming(assistantMessage.id);
+
+      let usage: ChatUsage = {};
+      let trace: unknown[] = [];
+      let stopReason: string = 'stop';
+      let evidence: EvidenceEntry[] = [];
+      let lastFlushAt = startedAt;
+
+      for await (const event of runAgentLoop(
+        this.chatProvider,
+        this.toolRegistry,
+        conversation.projectId,
+        AGENTIC_SYSTEM_PROMPT,
+        question,
+        signal,
+      )) {
+        if (event.type === 'text') {
+          buffer += event.delta;
+          yield { type: 'token', data: { delta: event.delta } };
+          if (Date.now() - lastFlushAt >= FLUSH_INTERVAL_MS) {
+            await this.messagesRepository.updateContent(assistantMessage.id, buffer);
+            lastFlushAt = Date.now();
+          }
+        } else if (event.type === 'tool_call') {
+          yield { type: 'tool', data: { name: event.name, args: event.args } };
+        } else if (event.type === 'done') {
+          usage = event.usage;
+          trace = event.trace;
+          stopReason = event.stopReason;
+          evidence = event.evidence;
+        }
+      }
+
+      if (signal.aborted) {
+        await this.messagesRepository.updateContent(assistantMessage.id, buffer);
+        return;
+      }
+
+      if (stopReason === 'budget_exhausted') {
+        // Graceful degradation (docs/phases/phase-7-agentic-search.md §2): the
+        // exhausted trajectory's own partial text is discarded in favor of a
+        // complete RAG answer on the same row — but its `tool_trace` is worth
+        // keeping, so `generateRagAnswer` is told about it explicitly.
+        const priorExchanges = await this.computePriorExchanges(conversationId);
+        yield* this.generateRagAnswer(
+          conversation,
+          userMessage,
+          assistantMessage,
+          question,
+          priorExchanges,
+          signal,
+          trace,
+        );
+        return;
+      }
+
+      const citations = parseCitations(buffer, evidence);
+      const latencyMs = Date.now() - startedAt;
+      const [providerName, ...modelParts] = this.chatProvider.id.split(':');
+
+      await this.messagesRepository.completeAssistant(assistantMessage.id, {
+        content: buffer,
+        provider: providerName ?? this.chatProvider.id,
+        model: modelParts.length > 0 ? modelParts.join(':') : null,
+        inputTokens: usage.inputTokens ?? null,
+        outputTokens: usage.outputTokens ?? null,
+        latencyMs,
+        toolTrace: trace,
+      });
+
+      // Every ledger entry gets a row, cited or not — same "Sources panel
+      // shows what got ignored" guarantee as the RAG path, just sourced from
+      // tool calls instead of an upfront retrieval pass. No chunkId/score:
+      // a read_file range has no backing chunk row at all, and a search_code
+      // hit's chunk metadata isn't needed for the citation to be clickable.
+      const citedMarkers = new Set(citations.map((c) => c.marker));
+      const citationRows: NewCitationRow[] = evidence.map((e) => ({
+        messageId: assistantMessage.id,
+        marker: e.marker,
+        chunkId: null,
+        filePath: e.path,
+        startLine: e.startLine,
+        endLine: e.endLine,
+        contentHash: null,
+        score: null,
+        retrievalRank: null,
+        used: citedMarkers.has(e.marker),
+      }));
+      await this.citationsRepository.insertMany(citationRows);
+
+      yield { type: 'done', data: { messageId: assistantMessage.id, citations, usage, latencyMs } };
+
+      try {
+        if (!conversation.title) {
+          await this.conversationsRepository.setTitle(conversationId, question.slice(0, TITLE_MAX_LENGTH));
+        }
+        await this.conversationsRepository.touch(conversationId);
+      } catch {
+        // ignore — title/updatedAt bookkeeping is cosmetic, not correctness-critical
+      }
+    } catch (err) {
+      if (signal.aborted) {
+        await this.messagesRepository.updateContent(assistantMessage.id, buffer);
+        return;
+      }
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      await this.messagesRepository.markError(assistantMessage.id, buffer, message);
+      yield { type: 'error', data: { messageId: assistantMessage.id, message } };
+    }
+  }
+
+  /**
+   * The RAG turn body — condense → retrieve → build prompt → stream →
+   * parse citations → persist → bookkeeping — on an assistant row that
+   * already exists. Shared by `streamMessage` (the normal Fast path) and by
+   * `streamAgenticMessage`'s budget-exhaustion fallback, so a fallback never
+   * creates a second pair of rows for one turn. Owns its own error/abort
+   * handling so either caller can simply `yield*` it.
+   */
+  private async *generateRagAnswer(
+    conversation: ConversationRow,
+    userMessage: MessageRow,
+    assistantMessage: MessageRow,
+    question: string,
+    priorExchanges: Exchange[],
+    signal: AbortSignal,
+    toolTrace?: unknown[],
+  ): AsyncGenerator<ChatSseEvent> {
+    let buffer = '';
+    try {
+      const project = await this.projectsRepository.findById(conversation.projectId);
 
       let retrievalQuery = question;
       if (priorExchanges.length > 0) {
@@ -214,6 +377,7 @@ export class ChatService {
         inputTokens: usage.inputTokens ?? null,
         outputTokens: usage.outputTokens ?? null,
         latencyMs,
+        toolTrace: toolTrace ?? null,
       });
 
       // Every retrieved chunk gets a row, not just the cited ones — the
@@ -242,9 +406,9 @@ export class ChatService {
       // so a hiccup here must never flip status back to 'error'.
       try {
         if (!conversation.title) {
-          await this.conversationsRepository.setTitle(conversationId, question.slice(0, TITLE_MAX_LENGTH));
+          await this.conversationsRepository.setTitle(conversation.id, question.slice(0, TITLE_MAX_LENGTH));
         }
-        await this.conversationsRepository.touch(conversationId);
+        await this.conversationsRepository.touch(conversation.id);
         await this.maybeUpdateSummary(
           conversation,
           priorExchanges,
@@ -272,132 +436,13 @@ export class ChatService {
   }
 
   /**
-   * Runs the Phase 7 agent loop instead of RAG retrieval: no condensation, no
-   * upfront `search` — the model fetches its own evidence via tool calls, and
-   * every concrete region it observes (a `search_code` snippet, a `read_file`
-   * range) becomes a numbered evidence-ledger entry. Citations are parsed and
-   * persisted exactly like the RAG path, just sourced from the ledger instead
-   * of a retrieval pass. Manual debug toggle ahead of the 7.4 router; mirrors
-   * `streamMessage`'s message-row lifecycle so both paths are
-   * indistinguishable in storage.
+   * The pair just inserted for this turn is always the newest two rows —
+   * everything before them is prior turns to condense/summarize against.
+   * Only a successfully completed turn is trustworthy context.
    */
-  async *streamAgenticMessage(
-    conversationId: string,
-    question: string,
-    signal: AbortSignal,
-  ): AsyncGenerator<ChatSseEvent> {
-    const conversation = await this.requireConversation(conversationId);
-    const { userMessage, assistantMessage } = await this.messagesRepository.createTurn(
-      conversationId,
-      question,
-    );
-
-    yield {
-      type: 'message_created',
-      data: { userMessageId: userMessage.id, assistantMessageId: assistantMessage.id },
-    };
-
-    let buffer = '';
-    const startedAt = Date.now();
-    try {
-      yield { type: 'status', data: { stage: 'generating' } };
-      await this.messagesRepository.markStreaming(assistantMessage.id);
-
-      let usage: ChatUsage = {};
-      let trace: unknown[] = [];
-      let stopReason: string = 'stop';
-      let evidence: EvidenceEntry[] = [];
-      let lastFlushAt = startedAt;
-
-      for await (const event of runAgentLoop(
-        this.chatProvider,
-        this.toolRegistry,
-        conversation.projectId,
-        AGENTIC_SYSTEM_PROMPT,
-        question,
-        signal,
-      )) {
-        if (event.type === 'text') {
-          buffer += event.delta;
-          yield { type: 'token', data: { delta: event.delta } };
-          if (Date.now() - lastFlushAt >= FLUSH_INTERVAL_MS) {
-            await this.messagesRepository.updateContent(assistantMessage.id, buffer);
-            lastFlushAt = Date.now();
-          }
-        } else if (event.type === 'tool_call') {
-          yield { type: 'tool', data: { name: event.name, args: event.args } };
-        } else if (event.type === 'done') {
-          usage = event.usage;
-          trace = event.trace;
-          stopReason = event.stopReason;
-          evidence = event.evidence;
-        }
-      }
-
-      if (signal.aborted) {
-        await this.messagesRepository.updateContent(assistantMessage.id, buffer);
-        return;
-      }
-
-      // The budget fallback to a RAG answer is 7.4's job — for now, be
-      // honest rather than silently persisting an empty answer.
-      if (stopReason === 'budget_exhausted' && !buffer.trim()) {
-        buffer = 'No answer — the tool-call budget was exhausted before the model produced a response.';
-      }
-
-      const citations = parseCitations(buffer, evidence);
-      const latencyMs = Date.now() - startedAt;
-      const [providerName, ...modelParts] = this.chatProvider.id.split(':');
-
-      await this.messagesRepository.completeAssistant(assistantMessage.id, {
-        content: buffer,
-        provider: providerName ?? this.chatProvider.id,
-        model: modelParts.length > 0 ? modelParts.join(':') : null,
-        inputTokens: usage.inputTokens ?? null,
-        outputTokens: usage.outputTokens ?? null,
-        latencyMs,
-        toolTrace: trace,
-      });
-
-      // Every ledger entry gets a row, cited or not — same "Sources panel
-      // shows what got ignored" guarantee as the RAG path, just sourced from
-      // tool calls instead of an upfront retrieval pass. No chunkId/score:
-      // a read_file range has no backing chunk row at all, and a search_code
-      // hit's chunk metadata isn't needed for the citation to be clickable.
-      const citedMarkers = new Set(citations.map((c) => c.marker));
-      const citationRows: NewCitationRow[] = evidence.map((e) => ({
-        messageId: assistantMessage.id,
-        marker: e.marker,
-        chunkId: null,
-        filePath: e.path,
-        startLine: e.startLine,
-        endLine: e.endLine,
-        contentHash: null,
-        score: null,
-        retrievalRank: null,
-        used: citedMarkers.has(e.marker),
-      }));
-      await this.citationsRepository.insertMany(citationRows);
-
-      yield { type: 'done', data: { messageId: assistantMessage.id, citations, usage, latencyMs } };
-
-      try {
-        if (!conversation.title) {
-          await this.conversationsRepository.setTitle(conversationId, question.slice(0, TITLE_MAX_LENGTH));
-        }
-        await this.conversationsRepository.touch(conversationId);
-      } catch {
-        // ignore — title/updatedAt bookkeeping is cosmetic, not correctness-critical
-      }
-    } catch (err) {
-      if (signal.aborted) {
-        await this.messagesRepository.updateContent(assistantMessage.id, buffer);
-        return;
-      }
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      await this.messagesRepository.markError(assistantMessage.id, buffer, message);
-      yield { type: 'error', data: { messageId: assistantMessage.id, message } };
-    }
+  private async computePriorExchanges(conversationId: string): Promise<Exchange[]> {
+    const allMessages = await this.messagesRepository.findAllByConversation(conversationId);
+    return toExchanges(allMessages.slice(0, -2)).filter((ex) => ex.answerStatus === 'complete');
   }
 
   /**

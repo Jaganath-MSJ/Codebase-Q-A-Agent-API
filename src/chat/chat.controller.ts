@@ -1,7 +1,8 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
-import { ChatService, type MessageWithCitations } from './chat.service';
+import { ChatService, type ChatSseEvent, type MessageWithCitations } from './chat.service';
+import { classifyMode } from './mode-router';
 import { CitationDto, ConversationDto, MessageDto, PostMessageDto } from '../contracts';
 import type { ConversationRow, CitationRow } from '../db/schema';
 
@@ -72,6 +73,11 @@ export class ChatController {
    * docs/phases/phase-3-conversation.md. Headers are only written once the
    * conversation is confirmed to exist, so a bad id still gets a normal JSON
    * 404 from Nest's exception filter instead of a malformed stream.
+   *
+   * Mode routing lives here, not in `ChatService` — the service exposes two
+   * plain generation strategies (Fast/Thorough), and this is the one place
+   * that decides which one a given request actually gets, whether from an
+   * explicit `mode` or the heuristic router on "auto".
    */
   @Post('conversations/:id/messages')
   @ApiOkResponse({
@@ -85,9 +91,13 @@ export class ChatController {
     const abortController = new AbortController();
     res.on('close', () => abortController.abort());
 
-    const events = dto.agentic
-      ? this.chatService.streamAgenticMessage(id, dto.question, abortController.signal)
-      : this.chatService.streamMessage(id, dto.question, abortController.signal);
+    const requestedMode = dto.mode ?? 'auto';
+    const resolvedMode = requestedMode === 'auto' ? classifyMode(dto.question) : requestedMode;
+
+    const events =
+      resolvedMode === 'thorough'
+        ? this.chatService.streamAgenticMessage(id, dto.question, abortController.signal)
+        : this.chatService.streamMessage(id, dto.question, abortController.signal);
     const first = await events.next();
 
     res.writeHead(HttpStatus.OK, {
@@ -102,7 +112,16 @@ export class ChatController {
       res.write(`event: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`);
     };
 
-    if (!first.done) write(first.value);
+    // Tags the very first event with what the router actually decided, so
+    // the UI can show "Auto → Thorough" without re-running the heuristic.
+    if (!first.done) {
+      const value: ChatSseEvent = first.value;
+      write(
+        value.type === 'message_created'
+          ? { ...value, data: { ...value.data, resolvedMode } }
+          : value,
+      );
+    }
     for await (const event of events) {
       write(event);
     }
