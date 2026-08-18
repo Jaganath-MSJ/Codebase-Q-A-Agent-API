@@ -160,6 +160,34 @@ Two things verified directly, beyond the recall table:
   still asserts `content === lines.slice(startLine-1, endLine).join('\n')` for every
   chunk of every fixture file, header-free.
 
+### Phase 8 — `halfvec` migration
+
+`chunks.embedding` moved from `vector(768)` (32-bit floats) to `halfvec(768)`
+(16-bit floats): `ALTER TABLE chunks ALTER COLUMN embedding SET DATA TYPE halfvec(768)`,
+applied live against the dev database with no `USING` clause needed — pgvector
+registers an implicit cast, and `drizzle-kit generate` produced exactly that
+one-line diff with no hand-editing required. No HNSW index step was part of
+this migration; unlike the phase doc's `DROP INDEX chunks_embedding_hnsw` /
+`CREATE INDEX ... USING hnsw` snippet assumes, **this repo never actually built
+the HNSW index Phase 1 designed** — `grep` across every migration in
+`drizzle/*.sql` turns up zero HNSW indexes, only the two GIN indexes for FTS
+and trigram. Vector search has always been an exact sequential scan; adding an
+ANN index now would be a separate, real decision (approximate vs. exact search
+is a different trade-off than float precision) and was deliberately left out
+of this slice rather than bundled in silently.
+
+Recall, re-run after the migration on the same `fixtures/tiny-repo` + 25
+questions as every number above: **identical to the pre-migration baseline**,
+vector 1.00/1.00/0.77, fts 0.84/0.88/0.58, trigram 0.12/0.12/0.10, hybrid
+0.92/1.00/0.77 — not "barely moves," didn't move at all on this fixture size.
+Storage did: `GET /api/projects/:id/storage` on "Calendar 2" (477 chunks) went
+from 196,864 vector bytes to 98,676 — a clean ~50% reduction, exactly the
+2-bytes-vs-4-bytes-per-dimension arithmetic predicts. (The same before/after
+also showed `sharedIndexBytes` drop, from 409,600 to 221,184 — that's the GIN
+indexes shrinking because `ALTER COLUMN TYPE` rewrites the whole table and
+rebuilds every index on it, incidentally clearing accumulated bloat; it's not
+a halfvec effect and shouldn't be read as one.)
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

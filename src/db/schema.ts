@@ -5,7 +5,7 @@ import {
   integer,
   real,
   timestamp,
-  vector,
+  halfvec,
   unique,
   uniqueIndex,
   index,
@@ -127,7 +127,9 @@ export const chunks = pgTable(
     endLine: integer('end_line').notNull(),
     content: text('content').notNull(),
     contentHash: text('content_hash').notNull(),
-    embedding: vector('embedding', { dimensions: 768 }),
+    // halfvec (16-bit floats): pgvector's negligible-recall-loss halving of
+    // storage over the full 32-bit `vector` type — see docs/phases/phase-8-polish.md.
+    embedding: halfvec('embedding', { dimensions: 768 }),
     // Qualified name from the structural chunker (e.g. "AuthService.validateUser") —
     // null for chunks the line-window fallback produced, or for gap-fill chunks
     // between structural nodes. See chunking/tree-sitter.chunker.ts.

@@ -134,6 +134,13 @@
       "when": 1786800050078,
       "tag": "0018_agentic_search_tool_trace",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1787017026101,
+      "tag": "0019_halfvec_embedding",
+      "breakpoints": true
     }
   ]
 }
