@@ -16,6 +16,16 @@ export function toConversationDto(row: ConversationRow): ConversationDto {
   };
 }
 
+function slugify(title: string | null): string | null {
+  if (!title) return null;
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+  return slug || null;
+}
+
 function toCitationDto(row: CitationRow): CitationDto {
   return {
     marker: row.marker,
@@ -66,6 +76,22 @@ export class ChatController {
   async listMessages(@Param('id') id: string): Promise<MessageDto[]> {
     const rows = await this.chatService.listMessages(id);
     return rows.map(toMessageDto);
+  }
+
+  /**
+   * A plain Markdown attachment, not JSON — the point is a file you can drop
+   * straight into a PR or design doc, so `Content-Disposition` (not a typed
+   * body) is what matters here, same pattern as the SSE endpoint above.
+   */
+  @Get('conversations/:id/export')
+  @ApiOkResponse({ description: 'text/markdown attachment of the full conversation transcript' })
+  async exportConversation(@Param('id') id: string, @Res() res: Response): Promise<void> {
+    const { title, markdown } = await this.chatService.exportConversationMarkdown(id);
+    const filename = `conversation-${slugify(title) ?? id}.md`;
+
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(markdown);
   }
 
   /**

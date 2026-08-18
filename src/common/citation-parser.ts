@@ -21,7 +21,10 @@ const FENCE_RE = /```[\s\S]*?```/g;
 // Also observed: a model bundling several markers into one bracket, e.g.
 // [2, 3] instead of [2][3] — group 1 captures the whole comma list so each
 // number can be split out below.
-const MARKER_RE = /\[(\d+(?:\s*,\s*\d+)*)\]|【(\d+)(?:†[^】]*)?】/g;
+// Exported so other pure renderers (e.g. conversation-markdown.ts) can find
+// the same markers without redefining — and re-derive, rather than diverge
+// from, what counts as a citation marker in this system.
+export const MARKER_RE = /\[(\d+(?:\s*,\s*\d+)*)\]|【(\d+)(?:†[^】]*)?】/g;
 
 export function parseCitations(answerText: string, evidence: EvidenceRef[]): Citation[] {
   const withoutFences = answerText.replace(FENCE_RE, '');

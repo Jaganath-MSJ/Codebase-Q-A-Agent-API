@@ -16,6 +16,7 @@ import {
   type EvidenceBlock,
 } from './prompt.builder';
 import { parseCitations, type Citation } from '../common/citation-parser';
+import { buildConversationMarkdown, type ExportCitation, type ExportMessage } from '../common/conversation-markdown';
 import { evictedExchanges, recentWindow, toExchanges, truncateAnswer, type Exchange } from './conversation-context';
 import { runAgentLoop } from './agent.loop';
 import type { EvidenceEntry } from './evidence-ledger';
@@ -90,6 +91,40 @@ export class ChatService {
     }
 
     return rows.map((row) => ({ ...row, citations: byMessage.get(row.id) ?? [] }));
+  }
+
+  async exportConversationMarkdown(conversationId: string): Promise<{ title: string | null; markdown: string }> {
+    const conversation = await this.requireConversation(conversationId);
+    const project = await this.projectsRepository.findById(conversation.projectId);
+    if (!project) throw new NotFoundException(`Project ${conversation.projectId} not found`);
+
+    const messages = await this.listMessages(conversationId);
+    const exportMessages: ExportMessage[] = messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+      citations: m.citations.map(
+        (c): ExportCitation => ({
+          marker: c.marker,
+          filePath: c.filePath,
+          startLine: c.startLine,
+          endLine: c.endLine,
+          used: c.used,
+        }),
+      ),
+    }));
+
+    const markdown = buildConversationMarkdown({
+      conversationTitle: conversation.title,
+      project: {
+        name: project.name,
+        sourceKind: project.sourceKind,
+        sourceRef: project.sourceRef,
+        headRevision: project.headRevision,
+      },
+      messages: exportMessages,
+    });
+
+    return { title: conversation.title, markdown };
   }
 
   /**
