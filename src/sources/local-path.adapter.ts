@@ -22,7 +22,7 @@ import type { MaterializeResult, SourceAdapter, SourceKind } from './source-adap
 // pays for two full directory scans — this one, then WalkerService's own —
 // a real cost accepted in exchange for skipping both entirely when nothing
 // changed. See docs/PROGRESS.md for the tradeoff this was weighed against in 4.1.
-const REVISION_IGNORE_GLOBS = ['**/node_modules/**', '**/.git/**', '**/dist/**', '**/build/**'];
+export const REVISION_IGNORE_GLOBS = ['**/node_modules/**', '**/.git/**', '**/dist/**', '**/build/**'];
 
 @Injectable()
 export class LocalPathAdapter implements SourceAdapter {
