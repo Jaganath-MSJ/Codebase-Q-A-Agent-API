@@ -1,0 +1,8 @@
+[
+  { "q": "How is user authentication handled?", "expectedFiles": ["src/auth.service.ts"], "expectUnanswerable": false },
+  { "q": "Where is `slugify` defined?", "expectedFiles": ["src/utils.ts"], "expectUnanswerable": false },
+  { "q": "What is the entry point of this program?", "expectedFiles": ["src/index.ts"], "expectUnanswerable": false },
+  { "q": "Where is the build command defined?", "expectedFiles": ["Makefile"], "expectUnanswerable": false },
+  { "q": "Where is the payment processing or billing logic implemented?", "expectedFiles": [], "expectUnanswerable": true },
+  { "q": "How does this application connect to a Redis cache?", "expectedFiles": [], "expectUnanswerable": true }
+]

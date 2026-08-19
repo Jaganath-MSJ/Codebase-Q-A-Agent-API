@@ -30,7 +30,8 @@ npm run dev            # API on :3000, docs at /api/docs
 npm run test           # vitest
 npm run db:generate    # drizzle-kit generate — then hand-edit for extensions/indexes
 npm run db:migrate
-npm run eval           # retrieval recall harness (Phase 5)
+npm run eval            # retrieval recall harness (Phase 5)
+npm run eval:answers    # answer-quality LLM judge (Phase 8) — manual, not a CI gate
 ```
 
 ## Environment

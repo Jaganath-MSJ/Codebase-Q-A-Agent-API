@@ -188,6 +188,55 @@ indexes shrinking because `ALTER COLUMN TYPE` rewrites the whole table and
 rebuilds every index on it, incidentally clearing accumulated bloat; it's not
 a halfvec effect and shouldn't be read as one.)
 
+### Phase 8 — answer quality (LLM judge)
+
+`npm run eval:answers` scores *answers*, not retrieval: for each question in
+`evals/answer-questions.json` it retrieves (hybrid, same as the real Fast
+path), generates a real answer with the active `CHAT_PROVIDER`, then has a
+second LLM call grade that answer against the evidence it was given on three
+dimensions — `grounded` (no invented claims), `allClaimsCited` (every claim
+carries a `[n]`), and `handledUnknownCorrectly` (refuses when the evidence
+genuinely doesn't contain the answer, attempts one when it does). The judge
+is deliberately the same `chatProvider.complete()` real answers use — there's
+no documented reason in this project's plan to hardcode a different judge
+model, and every other one-shot LLM call here (condensation, summarization,
+the tour) already reuses the injected provider the same way. Two of the six
+questions are deliberately unanswerable from this fixture (payment/billing
+logic, a Redis connection) specifically to exercise `handledUnknownCorrectly`
+in both directions, not just the "found it" case every other eval question
+tests.
+
+Per this project's own "treat as a trend, not a gate" framing, this is a
+manual `npm run eval:answers`, not a CI check — and the first real run
+surfaced exactly the kind of thing it's for. `gemini-flash-latest` (this
+repo's default `CHAT_PROVIDER`) was hitting a persistent `503 UNAVAILABLE`
+("high demand") from Google at the time of writing — not a bug in the
+harness (the very first question, both the answer call and the judge call,
+completed and cached correctly before the second question's call started
+failing, and three retries a few seconds apart all hit the same error) — so
+the number below is from a one-off `CHAT_PROVIDER=groq` override instead,
+without touching `.env`:
+
+| Dimension | Rate |
+|---|---|
+| grounded | 0.83 |
+| all claims cited | 0.33 |
+| handled unknowns correctly | 1.00 |
+
+`handledUnknownCorrectly` at a clean 1.00 is the headline result — both
+deliberately-unanswerable questions got a real "the evidence doesn't show
+this" answer instead of a hallucinated one, and every answerable question
+got a real attempt. `allClaimsCited` at 0.33 is a genuinely new, real
+finding, not noise: Groq's `openai/gpt-oss-120b` (`supportsTools: false`,
+per the Phase 7 notes) reliably grounds its claims in the retrieved evidence
+but is noticeably looser than Gemini about actually attaching a `[n]` marker
+to every one of them — several judged answers were marked "correct and
+grounded, but missing a citation marker on the primary claim." This is
+exactly the kind of gap Phase 5's retrieval-only harness cannot see at all,
+and worth re-running against the default Gemini provider once its outage
+clears, to see whether that citation-discipline gap is Groq-specific or
+shows up there too.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

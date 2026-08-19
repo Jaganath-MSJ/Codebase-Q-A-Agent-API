@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { buildCondensationPrompt, buildSummaryPrompt, buildUserPrompt } from './prompt.builder';
+import { buildCondensationPrompt, buildSummaryPrompt, buildUserPrompt, formatEvidenceBlock } from './prompt.builder';
 
 const evidence = [{ path: 'src/a.ts', startLine: 1, endLine: 3, content: 'export const a = 1;' }];
+
+describe('formatEvidenceBlock', () => {
+  it('numbers each block starting at 1 with a path:start-end header', () => {
+    const twoBlocks = [
+      ...evidence,
+      { path: 'src/b.ts', startLine: 5, endLine: 8, content: 'export const b = 2;' },
+    ];
+    expect(formatEvidenceBlock(twoBlocks)).toBe(
+      '[1] src/a.ts:1-3\nexport const a = 1;\n\n[2] src/b.ts:5-8\nexport const b = 2;',
+    );
+  });
+});
 
 describe('buildUserPrompt', () => {
   it('omits summary/recent-turns sections when there is no conversation context', () => {
@@ -10,6 +22,11 @@ describe('buildUserPrompt', () => {
     expect(prompt).not.toContain('RECENT TURNS');
     expect(prompt).toContain('CONTEXT:');
     expect(prompt).toContain('QUESTION:\nwhat is a?');
+  });
+
+  it('embeds formatEvidenceBlock\'s exact output inside CONTEXT', () => {
+    const prompt = buildUserPrompt(evidence, 'what is a?');
+    expect(prompt).toContain(`CONTEXT:\n${formatEvidenceBlock(evidence)}`);
   });
 
   it('includes the summary and recent turns when provided', () => {
