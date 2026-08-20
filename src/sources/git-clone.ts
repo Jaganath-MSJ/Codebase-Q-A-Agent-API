@@ -78,6 +78,18 @@ export async function resolveDefaultBranch(url: string, env?: GitEnv): Promise<s
   return match[1]!;
 }
 
+/**
+ * A ref advertisement, not a fetch — no object data transferred, no local
+ * clone touched. This is the "nearly free" check the auto-reindex poller
+ * runs on an interval to notice a moved remote head, distinct from
+ * `refreshRepo`'s real `git fetch` that only runs once a job actually starts.
+ */
+export async function remoteHeadSha(url: string, branch: string, env?: GitEnv): Promise<string | null> {
+  if (!SAFE_BRANCH_RE.test(branch)) throw new BadRequestException(`Not a valid branch name: ${branch}`);
+  const raw = await git(undefined, env).listRemote([url, `refs/heads/${branch}`]);
+  return raw.split(/\s+/)[0] || null;
+}
+
 export async function cloneRepo(url: string, branch: string, dest: string, env?: GitEnv): Promise<void> {
   await rm(dest, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
   await mkdir(path.dirname(dest), { recursive: true });

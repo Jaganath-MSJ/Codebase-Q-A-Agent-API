@@ -27,8 +27,10 @@ interface WatchEntry {
  * auto-enqueues a re-index (debounced) when a file changes — Phase 4's
  * revision early exit means a burst of saves that nets out to no real change
  * (e.g. an editor writing then reverting) still costs only a cheap walk, not
- * a full re-embed. `git_url`/`git_private`/`zip_upload` projects are out of
- * scope here — periodic `git fetch` polling is a separate, later decision.
+ * a full re-embed. `git_url`/`git_private` projects are handled by the
+ * sibling `GitPollService` instead (periodic remote-head check, not a
+ * filesystem event); `zip_upload` has neither a live folder nor a remote to
+ * watch, so it has no auto-reindex mechanism at all.
  */
 @Injectable()
 export class WatcherService implements OnModuleInit, OnModuleDestroy {
