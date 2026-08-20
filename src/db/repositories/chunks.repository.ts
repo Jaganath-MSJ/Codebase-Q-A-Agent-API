@@ -20,6 +20,13 @@ export interface FirstChunkOfFile {
   content: string;
 }
 
+export interface ChunkOfFile {
+  startLine: number;
+  endLine: number;
+  content: string;
+  symbol: string | null;
+}
+
 @Injectable()
 export class ChunksRepository {
   constructor(@Inject(DB_TOKEN) private readonly db: Db) {}
@@ -73,5 +80,20 @@ export class ChunksRepository {
       .from(chunks)
       .innerJoin(files, eq(chunks.fileId, files.id))
       .where(and(eq(chunks.projectId, projectId), eq(chunks.ord, 0)));
+  }
+
+  /** Every chunk of one exact repo-relative path, in chunk order — a changed file may span more than one chunk, unlike `findFirstChunkPerFile`. */
+  async findByPath(projectId: string, path: string): Promise<ChunkOfFile[]> {
+    return this.db
+      .select({
+        startLine: chunks.startLine,
+        endLine: chunks.endLine,
+        content: chunks.content,
+        symbol: chunks.symbol,
+      })
+      .from(chunks)
+      .innerJoin(files, eq(chunks.fileId, files.id))
+      .where(and(eq(chunks.projectId, projectId), eq(files.path, path)))
+      .orderBy(chunks.ord);
   }
 }

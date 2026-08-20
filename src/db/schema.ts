@@ -58,6 +58,25 @@ export interface TourRecord {
   revision: string;
 }
 
+export interface ChangeAnalysisCitation {
+  marker: number;
+  path: string;
+  startLine: number;
+  endLine: number;
+}
+
+export interface ChangeAnalysisRecord {
+  commitHash: string;
+  commitMessage: string;
+  changedFiles: string[];
+  summary: string;
+  citations: ChangeAnalysisCitation[];
+  generatedAt: string;
+  // The project.headRevision this was generated against — same idempotency
+  // shape as TourRecord.revision, keyed to job.completed firing on a new commit.
+  revision: string;
+}
+
 export const projects = pgTable(
   'projects',
   {
@@ -76,6 +95,7 @@ export const projects = pgTable(
     // recomputed on every successful index and injected into every chat prompt.
     overview: text('overview'),
     tour: jsonb('tour').$type<TourRecord>(),
+    changeAnalysis: jsonb('change_analysis').$type<ChangeAnalysisRecord>(),
     status: text('status').notNull().default('created'),
     fileCount: integer('file_count').notNull().default(0),
     chunkCount: integer('chunk_count').notNull().default(0),

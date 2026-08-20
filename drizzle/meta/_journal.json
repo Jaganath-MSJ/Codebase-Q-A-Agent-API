@@ -141,6 +141,13 @@
       "when": 1787017026101,
       "tag": "0019_halfvec_embedding",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1787190141736,
+      "tag": "0020_project_change_analysis",
+      "breakpoints": true
     }
   ]
 }

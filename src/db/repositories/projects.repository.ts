@@ -40,6 +40,7 @@ export class ProjectsRepository {
         | 'headRevision'
         | 'overview'
         | 'tour'
+        | 'changeAnalysis'
       >
     >,
   ): Promise<ProjectRow | undefined> {

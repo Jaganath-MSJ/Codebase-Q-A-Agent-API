@@ -1,7 +1,7 @@
 import { mkdir, rm } from 'node:fs/promises';
 import * as path from 'node:path';
 import { BadRequestException } from '@nestjs/common';
-import simpleGit, { CleanOptions } from 'simple-git';
+import simpleGit, { CleanOptions, type SimpleGit } from 'simple-git';
 
 // https:// only, github.com only, owner/repo shape, no shell metacharacters —
 // this string is about to be shelled out to via an argument array (never a
@@ -111,4 +111,70 @@ export async function setCleanRemoteUrl(dest: string, url: string): Promise<void
 
 export async function currentRevision(dest: string): Promise<string> {
   return (await simpleGit(dest).revparse(['HEAD'])).trim();
+}
+
+export interface ChangedFile {
+  path: string;
+  insertions: number;
+  deletions: number;
+  binary: boolean;
+  patch: string;
+}
+
+export interface LastCommitInfo {
+  hash: string;
+  message: string;
+  authorName: string;
+  date: string;
+  files: ChangedFile[];
+}
+
+/**
+ * `cloneRepo`/`refreshRepo` both fetch `--depth 1` — plenty for indexing
+ * (which only ever needs the current tree), but it means a fresh or
+ * just-refreshed clone has no `HEAD~1` to diff against at all. Deepens by
+ * exactly one commit, on demand, only when this feature actually needs it —
+ * the indexing path's own depth is left untouched.
+ */
+async function ensurePriorCommitAvailable(instance: SimpleGit): Promise<boolean> {
+  try {
+    await instance.revparse(['HEAD~1']);
+    return true;
+  } catch {
+    try {
+      await instance.fetch(['--deepen=1']);
+      await instance.revparse(['HEAD~1']);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+/** Null when there's no prior commit to diff against (a brand-new repo, or the deepen fetch itself failed). */
+export async function lastCommitDiff(dest: string): Promise<LastCommitInfo | null> {
+  const instance = git(dest);
+  if (!(await ensurePriorCommitAvailable(instance))) return null;
+
+  const log = await instance.log({ maxCount: 1 });
+  if (!log.latest) return null;
+
+  const summary = await instance.diffSummary(['HEAD~1']);
+  const files: ChangedFile[] = [];
+  for (const file of summary.files) {
+    if (file.binary) {
+      files.push({ path: file.file, insertions: 0, deletions: 0, binary: true, patch: '' });
+      continue;
+    }
+    const patch = await instance.diff(['HEAD~1', '--', file.file]);
+    files.push({ path: file.file, insertions: file.insertions, deletions: file.deletions, binary: false, patch });
+  }
+
+  return {
+    hash: log.latest.hash,
+    message: log.latest.message,
+    authorName: log.latest.author_name,
+    date: log.latest.date,
+    files,
+  };
 }
