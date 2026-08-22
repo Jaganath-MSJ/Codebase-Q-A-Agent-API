@@ -7,6 +7,24 @@ import type { EmbeddingProvider } from '../embedding-provider.interface';
 
 const MODEL_ID = 'nomic-ai/nomic-embed-text-v1.5';
 
+// This ONNX export's *real* context limit is config.json's max_position_embeddings
+// (2048), not tokenizer_config.json's model_max_length (8192) — transformers.js's
+// feature-extraction pipeline truncates against the latter (the tokenizer default)
+// with no way to override max_length through its public options, so a chunk over
+// ~2048 tokens reaches the model uncapped. Observed consequences on real
+// repositories: an ONNX buffer-allocation failure requesting ~27 GB for one batch,
+// and separately a malformed 0-dimensional pooled output — both silent/cryptic
+// instead of a clean error. A conservative character cap (empirically verified
+// against the worst real chunks that triggered this: the densest ~12,000-character
+// chunk tokenizes to ~3,234 tokens, so 4,500 characters leaves comfortable margin
+// under 2048 even for dense, low-whitespace content) avoids needing to reimplement
+// the pipeline's internal tokenization/pooling just to pass one extra option.
+const MAX_EMBED_TEXT_CHARS = 4500;
+
+export function truncateForEmbedding(text: string): string {
+  return text.length > MAX_EMBED_TEXT_CHARS ? text.slice(0, MAX_EMBED_TEXT_CHARS) : text;
+}
+
 @Injectable()
 export class LocalEmbeddingProvider implements EmbeddingProvider {
   readonly id = `local:${MODEL_ID}`;
@@ -36,7 +54,7 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
 
   private async embed(prefixed: string[]): Promise<number[][]> {
     const extractor = await this.getPipeline();
-    const output = await extractor(prefixed, { pooling: 'mean', normalize: true });
+    const output = await extractor(prefixed.map(truncateForEmbedding), { pooling: 'mean', normalize: true });
     return output.tolist() as number[][];
   }
 }
