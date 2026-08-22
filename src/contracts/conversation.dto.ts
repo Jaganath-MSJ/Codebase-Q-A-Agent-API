@@ -1,12 +1,20 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { ArrayMinSize, IsArray, IsIn, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class ConversationDto {
   @ApiProperty()
   id!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: "The conversation's original/primary project" })
   projectId!: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    isArray: true,
+    description:
+      'Only present for a multi-project conversation (2+ ids) — omitted entirely for an ordinary single-project one.',
+  })
+  projectIds?: string[];
 
   @ApiProperty({ nullable: true, type: String })
   title!: string | null;
@@ -16,6 +24,14 @@ export class ConversationDto {
 
   @ApiProperty()
   updatedAt!: string;
+}
+
+export class CreateMultiConversationDto {
+  @ApiProperty({ type: String, isArray: true, description: 'At least 2 distinct, already-indexed project ids' })
+  @IsArray()
+  @ArrayMinSize(2)
+  @IsUUID('4', { each: true })
+  projectIds!: string[];
 }
 
 export class CitationDto {
@@ -30,6 +46,13 @@ export class CitationDto {
 
   @ApiProperty()
   endLine!: number;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description: 'Which project this came from — only set for a multi-project conversation',
+  })
+  projectId?: string | null;
 
   @ApiProperty({ nullable: true, type: Number })
   score!: number | null;

@@ -13,6 +13,7 @@ import {
   boolean,
   jsonb,
   customType,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -217,6 +218,13 @@ export type NewIndexingJobRow = typeof indexingJobs.$inferInsert;
 
 export const conversations = pgTable('conversations', {
   id: uuid('id').primaryKey().defaultRandom(),
+  // The conversation's original/primary project — for a multi-project
+  // conversation this is the first project chosen at creation, so every
+  // pre-existing single-project code path (overview injection, Thorough
+  // mode's tool calls, Markdown export) keeps working unchanged without
+  // knowing multi-project conversations exist at all. See
+  // `conversationProjects` below for how "does this span more than one
+  // project" is actually represented.
   projectId: uuid('project_id')
     .notNull()
     .references(() => projects.id, { onDelete: 'cascade' }),
@@ -232,6 +240,32 @@ export const conversations = pgTable('conversations', {
 
 export type ConversationRow = typeof conversations.$inferSelect;
 export type NewConversationRow = typeof conversations.$inferInsert;
+
+// Phase 8: lets a conversation span more than one project. Deliberately a
+// join table alongside `conversations.project_id`, not a replacement for it,
+// and deliberately populated ONLY for conversations actually created as
+// multi-project (2+ rows) — an ordinary single-project conversation has ZERO
+// rows here, so its retrieval keeps going through the exact original
+// single-project call (including throwing loudly on an embedding-model
+// mismatch, which is correct when there's no other project to fall back to).
+// Only a conversation with 2+ rows here takes the new fan-out-with-per-
+// project-failure-isolation path — the two behaviors are deliberately kept
+// distinct rather than unified, so the common case is provably unchanged.
+export const conversationProjects = pgTable(
+  'conversation_projects',
+  {
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+  },
+  (table) => [primaryKey({ columns: [table.conversationId, table.projectId] })],
+);
+
+export type ConversationProjectRow = typeof conversationProjects.$inferSelect;
+export type NewConversationProjectRow = typeof conversationProjects.$inferInsert;
 
 export const messages = pgTable(
   'messages',
@@ -279,6 +313,12 @@ export const citations = pgTable(
       .references(() => messages.id, { onDelete: 'cascade' }),
     marker: integer('marker').notNull(),
     chunkId: uuid('chunk_id').references(() => chunks.id, { onDelete: 'set null' }),
+    // Denormalized, like filePath/startLine/endLine below — set only for a
+    // multi-project conversation's citations, so the UI can show which
+    // project a result came from. Null for every ordinary single-project
+    // conversation's citations (the project is already implied by the
+    // conversation itself there, so it would be redundant on every row).
+    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
     // Denormalized snapshot: survives re-indexing, so old conversations keep
     // readable citations even after the live chunk row is gone.
     filePath: text('file_path').notNull(),

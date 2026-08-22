@@ -148,6 +148,13 @@
       "when": 1787190141736,
       "tag": "0020_project_change_analysis",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1787373762660,
+      "tag": "0021_multi_project_conversations",
+      "breakpoints": true
     }
   ]
 }

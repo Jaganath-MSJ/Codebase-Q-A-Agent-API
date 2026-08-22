@@ -3,13 +3,23 @@ import type { Response } from 'express';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { ChatService, type ChatSseEvent, type MessageWithCitations } from './chat.service';
 import { classifyMode } from './mode-router';
-import { CitationDto, ConversationDto, MessageDto, PostMessageDto } from '../contracts';
+import { ConversationProjectsRepository } from '../db/repositories/conversation-projects.repository';
+import {
+  CitationDto,
+  ConversationDto,
+  CreateMultiConversationDto,
+  MessageDto,
+  PostMessageDto,
+} from '../contracts';
 import type { ConversationRow, CitationRow } from '../db/schema';
 
-export function toConversationDto(row: ConversationRow): ConversationDto {
+export function toConversationDto(row: ConversationRow, projectIds?: string[]): ConversationDto {
   return {
     id: row.id,
     projectId: row.projectId,
+    // Omitted entirely (not even `undefined` sent as null) for an ordinary
+    // single-project conversation — see the DTO's own doc comment.
+    ...(projectIds && projectIds.length >= 2 ? { projectIds } : {}),
     title: row.title,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -32,6 +42,7 @@ function toCitationDto(row: CitationRow): CitationDto {
     path: row.filePath,
     startLine: row.startLine,
     endLine: row.endLine,
+    projectId: row.projectId,
     score: row.score,
     retrievalRank: row.retrievalRank,
     used: row.used,
@@ -54,7 +65,10 @@ export function toMessageDto(row: MessageWithCitations): MessageDto {
 @ApiTags('chat')
 @Controller()
 export class ChatController {
-  constructor(private readonly chatService: ChatService) {}
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly conversationProjectsRepository: ConversationProjectsRepository,
+  ) {}
 
   @Post('projects/:projectId/conversations')
   @HttpCode(HttpStatus.CREATED)
@@ -64,11 +78,23 @@ export class ChatController {
     return toConversationDto(row);
   }
 
+  /** Fast/RAG mode only — see `ChatService.createMultiProjectConversation`'s doc comment. */
+  @Post('conversations/multi')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiCreatedResponse({ type: ConversationDto })
+  async createMultiConversation(@Body() dto: CreateMultiConversationDto): Promise<ConversationDto> {
+    const row = await this.chatService.createMultiProjectConversation(dto.projectIds);
+    return toConversationDto(row, dto.projectIds);
+  }
+
   @Get('projects/:projectId/conversations')
   @ApiOkResponse({ type: ConversationDto, isArray: true })
   async listConversations(@Param('projectId') projectId: string): Promise<ConversationDto[]> {
     const rows = await this.chatService.listConversations(projectId);
-    return rows.map(toConversationDto);
+    const projectIdsByConversation = await this.conversationProjectsRepository.findProjectIdsForConversations(
+      rows.map((r) => r.id),
+    );
+    return rows.map((row) => toConversationDto(row, projectIdsByConversation.get(row.id)));
   }
 
   @Get('conversations/:id/messages')
@@ -103,7 +129,11 @@ export class ChatController {
    * Mode routing lives here, not in `ChatService` — the service exposes two
    * plain generation strategies (Fast/Thorough), and this is the one place
    * that decides which one a given request actually gets, whether from an
-   * explicit `mode` or the heuristic router on "auto".
+   * explicit `mode` or the heuristic router on "auto". A multi-project
+   * conversation is always forced to Fast here, regardless of what was
+   * requested — Phase 7's tool executors are single-projectId-scoped
+   * throughout, so Thorough mode has no meaningful multi-project behavior
+   * to fall back to yet.
    */
   @Post('conversations/:id/messages')
   @ApiOkResponse({
@@ -118,7 +148,10 @@ export class ChatController {
     res.on('close', () => abortController.abort());
 
     const requestedMode = dto.mode ?? 'auto';
-    const resolvedMode = requestedMode === 'auto' ? classifyMode(dto.question) : requestedMode;
+    let resolvedMode = requestedMode === 'auto' ? classifyMode(dto.question) : requestedMode;
+    if (resolvedMode === 'thorough' && (await this.chatService.isMultiProject(id))) {
+      resolvedMode = 'fast';
+    }
 
     const events =
       resolvedMode === 'thorough'

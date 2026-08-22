@@ -3,6 +3,10 @@ export interface EvidenceRef {
   startLine: number;
   endLine: number;
   content: string;
+  // Only ever set by a multi-project conversation's evidence — see
+  // `ChatService.generateRagAnswer`. Passed through, never inspected, so
+  // this stays a pure marker-resolution function regardless.
+  projectId?: string;
 }
 
 export interface Citation {
@@ -11,6 +15,7 @@ export interface Citation {
   startLine: number;
   endLine: number;
   content: string;
+  projectId?: string;
 }
 
 const FENCE_RE = /```[\s\S]*?```/g;
@@ -47,6 +52,7 @@ export function parseCitations(answerText: string, evidence: EvidenceRef[]): Cit
         startLine: item.startLine,
         endLine: item.endLine,
         content: item.content,
+        projectId: item.projectId,
       });
     }
   }

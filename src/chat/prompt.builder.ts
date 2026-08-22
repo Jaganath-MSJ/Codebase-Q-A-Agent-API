@@ -3,6 +3,11 @@ export interface EvidenceBlock {
   startLine: number;
   endLine: number;
   content: string;
+  // Only ever set by a multi-project conversation — unused by
+  // `formatEvidenceBlock`/`buildUserPrompt` (the model isn't told about it
+  // yet, see docs/PROGRESS.md), carried here only so the same array can be
+  // handed to `parseCitations` afterward and come back out on each `Citation`.
+  projectId?: string;
 }
 
 export interface RecentExchange {

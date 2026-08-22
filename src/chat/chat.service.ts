@@ -1,7 +1,10 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { RetrievalService } from '../retrieval/retrieval.service';
+import type { ScoredChunk } from '../retrieval/vector.retriever';
+import { reciprocalRankFusion, type RankedList } from '../retrieval/rrf';
 import { ProjectsRepository } from '../db/repositories/projects.repository';
 import { ConversationsRepository } from '../db/repositories/conversations.repository';
+import { ConversationProjectsRepository } from '../db/repositories/conversation-projects.repository';
 import { MessagesRepository } from '../db/repositories/messages.repository';
 import { CitationsRepository } from '../db/repositories/citations.repository';
 import type { ConversationRow, MessageRow, CitationRow, NewCitationRow } from '../db/schema';
@@ -35,7 +38,14 @@ export interface SourceRef {
   startLine: number;
   endLine: number;
   score: number;
+  // Only set for a multi-project conversation's sources — see
+  // `ConversationProjectsRepository`'s doc comment for why an ordinary
+  // single-project conversation never populates this.
+  projectId?: string;
 }
+
+/** A retrieval result tagged with which project it came from — always set, even for a single-project search, so `generateRagAnswer` has one shape to work with regardless of how many projects a conversation spans. */
+type ScoredChunkWithProject = ScoredChunk & { projectId: string };
 
 export interface MessageWithCitations extends MessageRow {
   citations: CitationRow[];
@@ -58,10 +68,13 @@ export type ChatSseEvent =
 
 @Injectable()
 export class ChatService {
+  private readonly logger = new Logger(ChatService.name);
+
   constructor(
     private readonly retrievalService: RetrievalService,
     private readonly projectsRepository: ProjectsRepository,
     private readonly conversationsRepository: ConversationsRepository,
+    private readonly conversationProjectsRepository: ConversationProjectsRepository,
     private readonly messagesRepository: MessagesRepository,
     private readonly citationsRepository: CitationsRepository,
     private readonly toolRegistry: ToolRegistry,
@@ -74,8 +87,42 @@ export class ChatService {
     return this.conversationsRepository.create({ projectId, title: null });
   }
 
+  /**
+   * A conversation spanning 2+ projects — Fast/RAG mode only (Phase 7's tool
+   * executors are single-projectId-scoped throughout, so Thorough mode stays
+   * blocked for these; see `ChatController`'s mode-forcing). `projectId` on
+   * the created row is the first id given, purely so every pre-existing
+   * single-project code path that reads it (overview injection, Markdown
+   * export) keeps behaving sensibly without needing to know this
+   * conversation is unusual.
+   */
+  async createMultiProjectConversation(projectIds: string[]): Promise<ConversationRow> {
+    const distinctIds = [...new Set(projectIds)];
+    if (distinctIds.length < 2) {
+      throw new BadRequestException('A multi-project conversation needs at least 2 distinct project ids');
+    }
+
+    const projects = await Promise.all(distinctIds.map((id) => this.projectsRepository.findById(id)));
+    const missing = distinctIds.filter((_, i) => !projects[i]);
+    if (missing.length > 0) {
+      throw new NotFoundException(`Project(s) not found: ${missing.join(', ')}`);
+    }
+
+    const conversation = await this.conversationsRepository.create({
+      projectId: distinctIds[0]!,
+      title: null,
+    });
+    await this.conversationProjectsRepository.addAll(conversation.id, distinctIds);
+    return conversation;
+  }
+
   async listConversations(projectId: string): Promise<ConversationRow[]> {
     return this.conversationsRepository.findAllByProject(projectId);
+  }
+
+  async isMultiProject(conversationId: string): Promise<boolean> {
+    const projectIds = await this.conversationProjectsRepository.findProjectIds(conversationId);
+    return projectIds.length >= 2;
   }
 
   async listMessages(conversationId: string): Promise<MessageWithCitations[]> {
@@ -319,7 +366,16 @@ export class ChatService {
   ): AsyncGenerator<ChatSseEvent> {
     let buffer = '';
     try {
-      const project = await this.projectsRepository.findById(conversation.projectId);
+      // Only a conversation created via `createMultiProjectConversation` has
+      // rows here — an ordinary single-project conversation gets none, and
+      // retrieval below takes the exact original single-project call in that
+      // case, including its original "throw loudly on an embedding-model
+      // mismatch" behavior (correct when there's no other project to fall
+      // back to). `project` stays null for multi-project — see the
+      // `overview` note below.
+      const memberProjectIds = await this.conversationProjectsRepository.findProjectIds(conversation.id);
+      const isMultiProject = memberProjectIds.length >= 2;
+      const project = isMultiProject ? null : await this.projectsRepository.findById(conversation.projectId);
 
       let retrievalQuery = question;
       if (priorExchanges.length > 0) {
@@ -335,12 +391,11 @@ export class ChatService {
       await this.messagesRepository.setRetrievalQuery(assistantMessage.id, retrievalQuery);
 
       yield { type: 'status', data: { stage: 'retrieving' } };
-      const scoredChunks = await this.retrievalService.search(
-        conversation.projectId,
-        retrievalQuery,
-        'hybrid',
-        TOP_K,
-      );
+      const scoredChunks: ScoredChunkWithProject[] = isMultiProject
+        ? await this.retrieveAcrossProjects(memberProjectIds, retrievalQuery, TOP_K)
+        : (
+            await this.retrievalService.search(conversation.projectId, retrievalQuery, 'hybrid', TOP_K)
+          ).map((chunk) => ({ ...chunk, projectId: conversation.projectId }));
       if (signal.aborted) return;
 
       const evidence: EvidenceBlock[] = scoredChunks.map((chunk) => ({
@@ -348,12 +403,15 @@ export class ChatService {
         startLine: chunk.startLine,
         endLine: chunk.endLine,
         content: chunk.content,
+        projectId: isMultiProject ? chunk.projectId : undefined,
       }));
 
       // Emitted before the first token so `[1]` becomes a live chip the
       // instant it streams in, and so a slow first token has something to
       // show. Markers are 1-based positions in `scoredChunks`, matching how
       // `parseCitations` resolves `[n]` against the same-ordered `evidence`.
+      // `projectId` is only ever attached for a multi-project conversation —
+      // see `SourceRef`'s doc comment.
       yield {
         type: 'sources',
         data: {
@@ -363,12 +421,16 @@ export class ChatService {
             startLine: chunk.startLine,
             endLine: chunk.endLine,
             score: chunk.score,
+            projectId: isMultiProject ? chunk.projectId : undefined,
           })),
         },
       };
 
       // The model is shown the ORIGINAL question here, never the condensed
       // one — condensation is for retrieval only, and reads robotic otherwise.
+      // No `overview` for a multi-project conversation — which project's
+      // overview would even apply is an open design question (see
+      // docs/PROGRESS.md), deliberately deferred rather than guessed at.
       const generationWindow = recentWindow(priorExchanges, GENERATION_WINDOW).map(toPromptExchange);
       const user = buildUserPrompt(evidence, question, {
         overview: project?.overview,
@@ -424,6 +486,9 @@ export class ChatService {
           messageId: assistantMessage.id,
           marker,
           chunkId: chunk.chunkId,
+          // Denormalized only for a multi-project conversation — see
+          // `citations.projectId`'s doc comment in schema.ts.
+          projectId: isMultiProject ? chunk.projectId : null,
           filePath: chunk.path,
           startLine: chunk.startLine,
           endLine: chunk.endLine,
@@ -468,6 +533,47 @@ export class ChatService {
       await this.messagesRepository.markError(assistantMessage.id, buffer, message);
       yield { type: 'error', data: { messageId: assistantMessage.id, message } };
     }
+  }
+
+  /**
+   * Searches every member project independently and merges the results with
+   * `reciprocalRankFusion` — unchanged from single-project retrieval, since
+   * RRF fuses by rank position on bare (globally-unique) chunk ids with zero
+   * knowledge of which project an id came from. A project that fails (an
+   * embedding-model mismatch, mid-reindex, deleted) is skipped and logged
+   * rather than failing the whole turn — the one behavior that's genuinely
+   * new here, and deliberately NOT applied to the single-project path, which
+   * should keep failing loudly when its one and only project has a problem.
+   */
+  private async retrieveAcrossProjects(
+    projectIds: string[],
+    query: string,
+    limit: number,
+  ): Promise<ScoredChunkWithProject[]> {
+    const perProject = await Promise.all(
+      projectIds.map(async (projectId) => {
+        try {
+          return { projectId, chunks: await this.retrievalService.search(projectId, query, 'hybrid', limit) };
+        } catch (err) {
+          this.logger.warn(
+            `Multi-project retrieval skipped project ${projectId}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return { projectId, chunks: [] as ScoredChunk[] };
+        }
+      }),
+    );
+
+    const byId = new Map<string, ScoredChunkWithProject>();
+    const lists: RankedList[] = [];
+    for (const { projectId, chunks } of perProject) {
+      if (chunks.length === 0) continue;
+      lists.push({ ids: chunks.map((c) => c.chunkId) });
+      for (const chunk of chunks) byId.set(chunk.chunkId, { ...chunk, projectId });
+    }
+
+    return reciprocalRankFusion(lists)
+      .slice(0, limit)
+      .map((fused) => byId.get(fused.id)!);
   }
 
   /**

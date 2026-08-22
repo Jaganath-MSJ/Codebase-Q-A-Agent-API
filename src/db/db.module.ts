@@ -9,6 +9,7 @@ import { FilesRepository } from './repositories/files.repository';
 import { ChunksRepository } from './repositories/chunks.repository';
 import { JobsRepository } from './repositories/jobs.repository';
 import { ConversationsRepository } from './repositories/conversations.repository';
+import { ConversationProjectsRepository } from './repositories/conversation-projects.repository';
 import { MessagesRepository } from './repositories/messages.repository';
 import { CitationsRepository } from './repositories/citations.repository';
 import { CredentialsRepository } from './repositories/credentials.repository';
@@ -33,6 +34,7 @@ import { DB_TOKEN, PG_POOL_TOKEN } from './tokens';
     ChunksRepository,
     JobsRepository,
     ConversationsRepository,
+    ConversationProjectsRepository,
     MessagesRepository,
     CitationsRepository,
     CredentialsRepository,
@@ -45,6 +47,7 @@ import { DB_TOKEN, PG_POOL_TOKEN } from './tokens';
     ChunksRepository,
     JobsRepository,
     ConversationsRepository,
+    ConversationProjectsRepository,
     MessagesRepository,
     CitationsRepository,
     CredentialsRepository,
