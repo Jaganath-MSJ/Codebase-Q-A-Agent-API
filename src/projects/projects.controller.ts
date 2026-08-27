@@ -12,6 +12,7 @@ import {
   FileViewDto,
   IndexRequestDto,
   ProjectStorageDto,
+  CostEstimateDto,
 } from '../contracts';
 import { ProjectRow } from '../db/schema';
 
@@ -59,6 +60,12 @@ export class ProjectsController {
   async index(@Param('id') id: string, @Body() body: IndexRequestDto): Promise<JobDto> {
     const job = await this.jobsService.enqueue(id, body.force ? 'force' : 'initial');
     return toJobDto(job);
+  }
+
+  @Get(':id/cost-estimate')
+  @ApiOkResponse({ type: CostEstimateDto })
+  async getCostEstimate(@Param('id') id: string): Promise<CostEstimateDto> {
+    return this.indexingService.estimateIndexCost(id);
   }
 
   @Get(':id/file')

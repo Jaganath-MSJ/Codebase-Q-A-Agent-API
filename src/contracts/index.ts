@@ -8,3 +8,4 @@ export * from './upload.dto';
 export * from './storage.dto';
 export * from './change-analysis.dto';
 export * from './provider-status.dto';
+export * from './cost-estimate.dto';

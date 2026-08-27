@@ -16,8 +16,9 @@ import type { EmbeddingProvider } from '../embeddings/embedding-provider.interfa
 import { SourceAdapterRegistry } from '../sources/source-adapter.registry';
 import { RepoOverviewService } from '../overview/repo-overview.service';
 import type { OverviewFileEntry } from '../overview/overview-digest';
-import { EmbeddingRateLimiter, withEmbeddingRetry } from './rate-limiter';
+import { DEFAULT_RATE_LIMIT, EmbeddingRateLimiter, withEmbeddingRetry } from './rate-limiter';
 import type { ProjectRow, NewChunkRow } from '../db/schema';
+import type { CostEstimateDto } from '../contracts';
 
 function langFromPath(relPath: string): string | null {
   const ext = path.extname(relPath).slice(1).toLowerCase();
@@ -192,6 +193,77 @@ export class IndexingService {
     if (!updated) throw new NotFoundException(`Project ${projectId} not found`);
 
     return updated;
+  }
+
+  /**
+   * Read-only preview of what `indexProject` would do, run before the user
+   * commits to a job: walks and hashes the tree exactly as the real chunking
+   * phase does, but only chunks files that actually changed and never writes
+   * anything or calls the embedding provider. "Cached" means the file is
+   * unchanged since the last index, so its existing chunks keep their
+   * existing embedding — the real, already-implemented mechanism `indexProject`
+   * relies on. There is no cross-project embedding cache in this codebase
+   * (`docs/architecture.md`'s `embedding_cache` table was never built), so
+   * every chunk from a new or changed file is counted as a real request —
+   * reporting anything smaller would be a faked number.
+   */
+  async estimateIndexCost(projectId: string): Promise<CostEstimateDto> {
+    const project = await this.projectsRepository.findById(projectId);
+    if (!project) throw new NotFoundException(`Project ${projectId} not found`);
+
+    const adapter = this.sourceAdapterRegistry.getAdapter(project.sourceKind);
+    const { workspacePath, revision } = await adapter.materialize(project);
+
+    const requestsToday = await this.jobsRepository.sumEmbedRequestsToday();
+    const requestsPerDay = DEFAULT_RATE_LIMIT.requestsPerDay;
+
+    if (project.headRevision && revision === project.headRevision) {
+      return {
+        unchanged: true,
+        totalChunks: project.chunkCount,
+        cachedChunks: project.chunkCount,
+        toEmbedChunks: 0,
+        estimatedRequests: 0,
+        requestsToday,
+        requestsPerDay,
+        percentOfDailyQuota: 0,
+      };
+    }
+
+    const walkResult = await this.walkerService.walk(workspacePath);
+    const existing = await this.filesRepository.findAllByProjectId(projectId);
+    const existingByPath = new Map(existing.map((file) => [file.path, file]));
+
+    const unchangedFileIds: string[] = [];
+    let toEmbedChunks = 0;
+
+    for (const entry of walkResult.included) {
+      const { text, lines } = await readSourceFile(entry.absPath);
+      const contentHash = sha256(`${CHUNKER_VERSION}\n${text}`);
+      const existingFile = existingByPath.get(entry.relPath);
+
+      if (existingFile && existingFile.contentHash === contentHash) {
+        unchangedFileIds.push(existingFile.id);
+      } else {
+        const lang = langFromPath(entry.relPath);
+        toEmbedChunks += this.chunker.chunk(lines, lang).length;
+      }
+    }
+
+    const cachedChunks = await this.chunksRepository.countByFileIds(unchangedFileIds);
+    const totalChunks = cachedChunks + toEmbedChunks;
+    const estimatedRequests = Math.ceil(toEmbedChunks / this.embeddingProvider.maxBatchSize);
+
+    return {
+      unchanged: false,
+      totalChunks,
+      cachedChunks,
+      toEmbedChunks,
+      estimatedRequests,
+      requestsToday,
+      requestsPerDay,
+      percentOfDailyQuota: requestsPerDay > 0 ? Math.round((estimatedRequests / requestsPerDay) * 100) : 0,
+    };
   }
 
   /**

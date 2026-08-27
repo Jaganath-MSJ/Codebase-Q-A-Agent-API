@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, eq, isNull } from 'drizzle-orm';
+import { and, count, eq, inArray, isNull } from 'drizzle-orm';
 import type { Db } from '../pool';
 import { DB_TOKEN } from '../tokens';
 import { chunks, files, ChunkRow, NewChunkRow } from '../schema';
@@ -60,6 +60,16 @@ export class ChunksRepository {
       .select({ value: count() })
       .from(chunks)
       .where(eq(chunks.projectId, projectId));
+    return row?.value ?? 0;
+  }
+
+  /** Chunk count across a set of unchanged files' existing rows — used by the cost estimate to size the "cached, no request needed" bucket without re-chunking them. */
+  async countByFileIds(fileIds: string[]): Promise<number> {
+    if (fileIds.length === 0) return 0;
+    const [row] = await this.db
+      .select({ value: count() })
+      .from(chunks)
+      .where(inArray(chunks.fileId, fileIds));
     return row?.value ?? 0;
   }
 
