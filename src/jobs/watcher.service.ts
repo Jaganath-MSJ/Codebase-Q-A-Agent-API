@@ -58,7 +58,17 @@ export class WatcherService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async syncWatchedProjects(): Promise<void> {
-    const projects = await this.projectsRepository.findAll();
+    let projects: ProjectRow[];
+    try {
+      projects = await this.projectsRepository.findAll();
+    } catch (err) {
+      // Called unawaited from a setInterval — an uncaught rejection here would
+      // crash the whole process on a transient Neon blip (this project's notes
+      // already document these as routine, e.g. ETIMEDOUT/ENOTFOUND). Skip this
+      // cycle; the next poll (or a fresh `job.created` wake) tries again.
+      this.logger.warn(`Project poll failed, will retry next cycle: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
     // `headRevision` is only set once a project has indexed successfully at
     // least once — watching a never-indexed project would just auto-trigger
     // the *first* index before the user has ever pressed "Index" themselves.

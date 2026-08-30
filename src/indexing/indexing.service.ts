@@ -321,20 +321,23 @@ export class IndexingService {
 
       await this.rateLimiter.reserve();
       const vectors = await withEmbeddingRetry(async () => {
-        const result = await this.embeddingProvider.embedDocuments(group.map((c) => buildEmbeddingText(c)));
+        const texts = group.map((c) => buildEmbeddingText(c));
+        const result = await this.embeddingProvider.embedDocuments(texts);
         // The provider can return a short or malformed batch without throwing
         // (observed with the local ONNX model under memory pressure) — turn that
         // into a loud, retryable error instead of a cryptic pgvector dimension
         // mismatch several layers away.
+        const describeBatch = () =>
+          group.map((c) => `${c.path ?? '?'}:${c.startLine}-${c.endLine}`).join(', ');
         if (result.length !== group.length) {
           throw new Error(
-            `Embedding provider returned ${result.length} vectors for a batch of ${group.length} chunks`,
+            `Embedding provider returned ${result.length} vectors for a batch of ${group.length} chunks [${describeBatch()}]`,
           );
         }
         const badIndex = result.findIndex((v) => v.length !== this.embeddingProvider.dimensions);
         if (badIndex !== -1) {
           throw new Error(
-            `Embedding provider returned a ${result[badIndex]!.length}-dimensional vector at batch index ${badIndex}, expected ${this.embeddingProvider.dimensions}`,
+            `Embedding provider returned a ${result[badIndex]!.length}-dimensional vector at batch index ${badIndex}, expected ${this.embeddingProvider.dimensions} [${describeBatch()}]`,
           );
         }
         return result;

@@ -25,11 +25,27 @@ export function truncateForEmbedding(text: string): string {
   return text.length > MAX_EMBED_TEXT_CHARS ? text.slice(0, MAX_EMBED_TEXT_CHARS) : text;
 }
 
+// transformers.js pads every sequence in a batch to the longest sequence in
+// that same batch before running inference, and attention cost is quadratic
+// in that padded length — so a batch's peak memory is driven by its longest
+// member, not its average. Real chunk lengths vary enough that a batch of 32
+// commonly contains at least one chunk near the 2048-token ceiling above,
+// which then forces all 32 to pay that chunk's full quadratic cost. Root-
+// caused via isolated reproduction (see docs/PROGRESS.md): a single
+// near-ceiling chunk alone peaks around 577 MB RSS, but a same-length batch
+// of 32 extrapolates to the ~14 GB spikes actually observed on an 8 GB
+// machine. Measured worst case (4 real chunks, each truncated to the 2048-
+// token ceiling) peaks at ~1.46 GB — a batch of 32 at that same worst case
+// would be roughly 8x that. 4 keeps worst-case peak memory well within an
+// 8 GB machine's budget; it costs throughput (more, smaller requests) but
+// nothing else, since the per-day request budget (900) has ample headroom.
+const MAX_BATCH_SIZE = 4;
+
 @Injectable()
 export class LocalEmbeddingProvider implements EmbeddingProvider {
   readonly id = `local:${MODEL_ID}`;
   readonly dimensions = 768 as const;
-  readonly maxBatchSize = 32;
+  readonly maxBatchSize = MAX_BATCH_SIZE;
 
   private pipelinePromise: Promise<FeatureExtractionPipeline> | undefined;
 
