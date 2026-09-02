@@ -57,13 +57,32 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
         if (outcome === 'paused') break;
         job = await this.jobsRepository.claimNext();
       }
+    } catch (err) {
+      // Every caller invokes drain() fire-and-forget (`void this.drain()`), so a
+      // rejection escaping here — e.g. a transient ECONNRESET while claiming the
+      // next job — would surface as an unhandled rejection and crash the worker.
+      // Swallow and log; the 60s safety poll (or the next job.created) retries.
+      this.logger.warn(
+        `Drain cycle aborted, will retry: ${err instanceof Error ? err.message : String(err)}`,
+      );
     } finally {
       this.draining = false;
     }
   }
 
   private async runJob(job: IndexingJobRow): Promise<'done' | 'paused'> {
-    const heartbeat = setInterval(() => void this.jobsRepository.heartbeat(job.id), HEARTBEAT_MS);
+    const heartbeat = setInterval(() => {
+      // Best-effort lease renewal. A transient DB blip (e.g. Neon resetting an
+      // idle pooled connection with ECONNRESET during a long chunking phase)
+      // must not become an unhandled rejection that crashes the worker: skip
+      // this tick, the next one renews the lease, and if every tick fails the
+      // lease simply expires and the job is reclaimed.
+      void this.jobsRepository.heartbeat(job.id).catch((err) => {
+        this.logger.warn(
+          `Heartbeat for job ${job.id} failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    }, HEARTBEAT_MS);
     let outcome: 'done' | 'paused' = 'done';
     try {
       await this.indexingService.indexProject(
