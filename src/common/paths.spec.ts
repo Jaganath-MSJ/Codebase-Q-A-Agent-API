@@ -46,4 +46,12 @@ describe('resolveInside', () => {
     // path-traversal table, alongside `../`, `..\`, absolute, and `C:\`.
     expect(() => resolveInside(root, '\\\\server\\share\\secret.txt')).toThrow(/escapes root/);
   });
+
+  it('rejects a Windows drive-relative path', () => {
+    // `C:foo` (no slash after the drive) is drive-*relative* — path.isAbsolute
+    // reports false for it, but it still refers off the intended root, so the
+    // guard must reject it on any host. Same for a drive-relative traversal.
+    expect(() => resolveInside(root, 'C:secret.txt')).toThrow(/escapes root/);
+    expect(() => resolveInside(root, 'C:../../etc/passwd')).toThrow(/escapes root/);
+  });
 });
