@@ -16,7 +16,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "eval": "ts-node -r tsconfig-paths/register evals/run-eval.ts",
-    "eval:answers": "ts-node -r tsconfig-paths/register evals/run-answer-eval.ts"
+    "eval:answers": "ts-node -r tsconfig-paths/register evals/run-answer-eval.ts",
+    "bench": "ts-node -r tsconfig-paths/register evals/bench-retrieval.ts",
+    "bench:index": "ts-node -r tsconfig-paths/register evals/bench-index.ts"
   },
   "dependencies": {
     "@google/genai": "^2.15.0",
