@@ -45,7 +45,20 @@ export class GitPollService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async checkAll(): Promise<void> {
-    const projects = await this.projectsRepository.findAll();
+    let projects: ProjectRow[];
+    try {
+      projects = await this.projectsRepository.findAll();
+    } catch (err) {
+      // Called unawaited from a setInterval — an uncaught rejection here (e.g. a
+      // transient DB outage) would crash the whole process, unlike WatcherService
+      // and WorkerService which swallow the same failure. Log and skip this
+      // cycle; the next poll tries again.
+      this.logger.warn(
+        `Project poll failed, will retry next cycle: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return;
+    }
+
     const qualifying = projects.filter(
       (p) => (p.sourceKind === 'git_url' || p.sourceKind === 'git_private') && p.headRevision !== null,
     );
