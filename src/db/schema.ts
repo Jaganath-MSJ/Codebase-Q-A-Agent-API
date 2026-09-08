@@ -164,6 +164,16 @@ export const chunks = pgTable(
     unique().on(table.fileId, table.ord),
     index('chunks_tsv_gin').using('gin', table.tsv),
     index('chunks_trgm_gin').using('gin', table.searchText.op('gin_trgm_ops')),
+    // Phase 12.1: ANN vector search. Partial (embedded rows only) HNSW index over
+    // cosine distance on halfvec(768). Opclass MUST be halfvec_cosine_ops to match
+    // the column type and the `<=>`/cosineDistance operator in vector.retriever.ts;
+    // the partial predicate mirrors that retriever's `isNotNull(embedding)` filter.
+    index('chunks_embedding_hnsw')
+      .using('hnsw', table.embedding.op('halfvec_cosine_ops'))
+      .with({ m: 16, ef_construction: 64 })
+      .where(sql`${table.embedding} IS NOT NULL`),
+    // Per-project queries stop scanning every project's chunks (the whole table).
+    index('chunks_project_id_idx').on(table.projectId),
   ],
 );
 

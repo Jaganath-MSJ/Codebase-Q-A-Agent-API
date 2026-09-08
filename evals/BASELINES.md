@@ -57,6 +57,37 @@ per-phase wall-clock from `onProgress`. Baseline on "React-Portfolio (local)" �
 
 `fileCount 59 · chunkCount 92 · embedRequests 23 (= ceil(92/4)) · peak RSS 618.7 MB`
 
+## 12.1 — HNSW + project_id index result (measured after applying 0022)
+
+Index built correctly and recall is unaffected, but **the planner does not use the HNSW
+index at this corpus size (~2419 chunks total)** — brute-force is genuinely cheaper here.
+
+Recall used the top-k stability substitute (`evals/topk-stability.ts`) rather than
+`npm run eval`, because this Postgres has no indexed "Tiny Repo" project row (the
+`api/fixtures/tiny-repo` directory exists, but `run-eval.ts` needs it added + indexed).
+
+- **Recall gate (top-k stability, `evals/topk-stability.ts` on "Calendar"):** recall@5 1.000,
+  recall@10 1.000, top-1 agree 25/25 — top-k unchanged by the migration. Note this proves the
+  migration didn't disturb results, but does NOT exercise HNSW's *approximate* recall: since the
+  planner brute-forces at this size (below), both runs are exact seq-scans. True HNSW recall must
+  be re-checked once the index is actually chosen (i.e., at scale) — that's when a regression could appear.
+- **DB bytes (0.5 GB budget):** total 39 MB → 43 MB. New indexes: `chunks_embedding_hnsw` 4616 kB,
+  `chunks_project_id_idx` 32 kB. 8.4% of 512 MB — fine.
+- **EXPLAIN, real retrieval query (self, 1385 chunks):** still `Seq Scan on chunks`,
+  Execution Time ~8 ms (unchanged from baseline) — planner brute-forces.
+- **Forced (`enable_seqscan=off, enable_bitmapscan=off`), global ANN:** DOES use
+  **`Index Scan using chunks_embedding_hnsw`** — proving the index is functional — but at
+  **118.9 ms vs 7.5 ms** for the seq-scan. HNSW is ~16× slower here; its fixed traversal
+  overhead only pays off once a seq-scan of the embedded rows would exceed ~120 ms
+  (roughly tens of thousands of rows). pgvector is 0.8.1 (iterative_scan available if/when
+  the filtered HNSW path is ever chosen — moot until then).
+
+**Conclusion:** the index is correct, recall-safe, cheap on disk, and is forward-looking
+infrastructure that engages automatically once repos are large enough. The doc's
+"EXPLAIN shows Index Scan" / "p50 drops" acceptance is a scale property, not met at this
+corpus — and that's correct planner behavior, not a defect. Re-run `evals/topk-stability.ts`
+and this EXPLAIN probe after indexing a genuinely large repo to see the crossover.
+
 ### What Phase 2 must move
 
 - **chunking ~20 s** for 59 files is dominated by per-file `replaceFile` round-trips to Neon

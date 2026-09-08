@@ -1,0 +1,2 @@
+CREATE INDEX IF NOT EXISTS "chunks_embedding_hnsw" ON "chunks" USING hnsw ("embedding" halfvec_cosine_ops) WITH (m=16,ef_construction=64) WHERE "chunks"."embedding" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "chunks_project_id_idx" ON "chunks" USING btree ("project_id");
