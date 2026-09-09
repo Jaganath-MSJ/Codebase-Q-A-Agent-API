@@ -27,7 +27,7 @@ interface EvalQuestion {
   q: string;
   expectedFiles: string[];
 }
-type Snapshot = Record<number, string[]>; // question index -> top-K chunkIds
+type Snapshot = Record<number, string[]>; // question index -> top-K "path:start-end" keys
 
 @Module({ imports: [ConfigModule, DbModule, RetrievalModule] })
 class TopKModule {}
@@ -73,7 +73,10 @@ async function main(): Promise<void> {
     for (let i = 0; i < questions.length; i++) {
       const qv = await embeddingProvider.embedQuery(questions[i]!.q);
       const hits = await vectorRetriever.search(project.id, qv, TOP_K);
-      snapshot[i] = hits.map((h) => h.chunkId);
+      // Key by path:lines, not chunkId — a cold re-index regenerates chunk UUIDs
+      // but the pure chunker yields identical path/startLine/endLine, so this
+      // stays comparable across re-indexes (e.g. verifying 12.5's bulk writes).
+      snapshot[i] = hits.map((h) => `${h.path}:${h.startLine}-${h.endLine}`);
     }
     writeFileSync(outFile, JSON.stringify(snapshot, null, 2));
     console.log(`\ntopk-stability · '${project.name}' · ${questions.length} questions · wrote ${outFile}`);

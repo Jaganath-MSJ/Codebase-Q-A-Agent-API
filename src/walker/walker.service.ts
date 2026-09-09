@@ -4,6 +4,7 @@ import { isBinaryFile } from 'isbinaryfile';
 import { readFile, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 import { toPosix } from '../common/paths';
+import { toLines } from '../common/read-file';
 import {
   classifyExtension,
   DENYLIST_PREFIXES,
@@ -17,6 +18,12 @@ import { loadGitignoreFilter } from './gitignore';
 export interface WalkedFile {
   relPath: string;
   absPath: string;
+  // Read once here (Phase 12.6) so the indexer doesn't re-read from disk. The
+  // CRLF→LF normalization goes through read-file.ts's `toLines`, so `text` is
+  // byte-identical to a `readSourceFile` and `contentHash` never spuriously
+  // changes. The indexer releases these per-entry after chunking to bound memory.
+  text: string;
+  lines: string[];
 }
 
 export type SkipReason = 'gitignore' | 'filename' | 'extension' | 'too-large' | 'binary' | 'minified';
@@ -77,18 +84,22 @@ export class WalkerService {
         continue;
       }
 
+      // One read: the raw buffer feeds the byte-level binary sniff; its utf8
+      // decode feeds the minified check and read-file.ts's normalization.
       const buf = await readFile(absPath);
       if (await isBinaryFile(buf)) {
         bump('binary');
         continue;
       }
 
-      if (hasExcessiveLineLength(buf.toString('utf8'))) {
+      const raw = buf.toString('utf8');
+      if (hasExcessiveLineLength(raw)) {
         bump('minified');
         continue;
       }
 
-      included.push({ relPath, absPath });
+      const { text, lines } = toLines(raw);
+      included.push({ relPath, absPath, text, lines });
     }
 
     return { included, skipReasons };

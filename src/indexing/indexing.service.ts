@@ -5,7 +5,6 @@ import { FilesRepository } from '../db/repositories/files.repository';
 import { ChunksRepository } from '../db/repositories/chunks.repository';
 import { JobsRepository } from '../db/repositories/jobs.repository';
 import { WalkerService } from '../walker/walker.service';
-import { readSourceFile } from '../common/read-file';
 import { sha256 } from '../common/hash';
 import { CHUNKER_TOKEN } from '../chunking/chunking.module';
 import { CHUNKER_VERSION, type Chunker } from '../chunking/chunker.interface';
@@ -121,7 +120,9 @@ export class IndexingService {
     for (const entry of walked) {
       if (await shouldCancel?.()) throw new IndexCanceledError(`Canceled during chunking at ${entry.relPath}`);
 
-      const { text, lines } = await readSourceFile(entry.absPath);
+      // Read once by the walker (Phase 12.6) — reuse its normalized text/lines
+      // rather than re-reading from disk.
+      const { text, lines } = entry;
       const lang = langFromPath(entry.relPath);
       // CHUNKER_VERSION participates in the hash so bumping it invalidates
       // every file's "unchanged" check exactly once, forcing a full
@@ -153,6 +154,12 @@ export class IndexingService {
       } else {
         filesSkipped = bumpSkipped('unchanged');
       }
+
+      // Release this file's content now that it's chunked. The walk-phase peak
+      // is still O(total source text) at the walk→chunk boundary, but this drains
+      // it as chunking advances so it isn't held through the embedding phase.
+      entry.text = '';
+      entry.lines = [];
 
       filesDone++;
       await onProgress?.({
@@ -238,7 +245,8 @@ export class IndexingService {
     let toEmbedChunks = 0;
 
     for (const entry of walkResult.included) {
-      const { text, lines } = await readSourceFile(entry.absPath);
+      // Reuse the walker's single read (Phase 12.6); release per-entry.
+      const { text, lines } = entry;
       const contentHash = sha256(`${CHUNKER_VERSION}\n${text}`);
       const existingFile = existingByPath.get(entry.relPath);
 
@@ -248,6 +256,8 @@ export class IndexingService {
         const lang = langFromPath(entry.relPath);
         toEmbedChunks += this.chunker.chunk(lines, lang).length;
       }
+      entry.text = '';
+      entry.lines = [];
     }
 
     const cachedChunks = await this.chunksRepository.countByFileIds(unchangedFileIds);
@@ -344,11 +354,9 @@ export class IndexingService {
       });
       embedRequests++;
 
-      for (let i = 0; i < group.length; i++) {
-        const chunk = group[i]!;
-        const vector = vectors[i]!;
-        await this.chunksRepository.setEmbedding(chunk.id, vector);
-      }
+      await this.chunksRepository.setEmbeddingsBulk(
+        group.map((chunk, i) => ({ id: chunk.id, embedding: vectors[i]! })),
+      );
       chunksEmbedded += group.length;
       await onProgress?.({ phase: 'embedding', chunksTotal, chunksEmbedded, embedRequests });
     }
