@@ -1,5 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { JobsRepository } from '../db/repositories/jobs.repository';
+import { EMBEDDING_PROVIDER_TOKEN } from '../embeddings/embeddings.module';
+import type { EmbeddingProvider } from '../embeddings/embedding-provider.interface';
 
 export interface RateLimitConfig {
   requestsPerMinute: number;
@@ -30,15 +32,24 @@ export class EmbeddingRateLimiter {
   private minuteWindowStart = Date.now();
   private requestsThisMinute = 0;
 
-  constructor(private readonly jobsRepository: JobsRepository) {}
+  constructor(
+    private readonly jobsRepository: JobsRepository,
+    @Inject(EMBEDDING_PROVIDER_TOKEN)
+    private readonly embeddingProvider: EmbeddingProvider,
+  ) {}
 
   /** Resolves once there's room in the per-minute bucket, or throws if today's budget is used up. */
   async reserve(config: RateLimitConfig = DEFAULT_RATE_LIMIT): Promise<void> {
-    const usedToday = await this.jobsRepository.sumEmbedRequestsToday();
-    if (usedToday >= config.requestsPerDay) {
-      throw new EmbeddingQuotaExhaustedError(
-        `Daily embedding request budget (${config.requestsPerDay}) reached; will resume once it resets.`,
-      );
+    // The local ONNX provider has no hosted quota, so the per-batch
+    // `SUM(embed_requests)` aggregate (and the daily guard it feeds) is pointless
+    // there — skip it. Preserve both exactly for any hosted provider (gemini).
+    if (!this.embeddingProvider.id.startsWith('local:')) {
+      const usedToday = await this.jobsRepository.sumEmbedRequestsToday();
+      if (usedToday >= config.requestsPerDay) {
+        throw new EmbeddingQuotaExhaustedError(
+          `Daily embedding request budget (${config.requestsPerDay}) reached; will resume once it resets.`,
+        );
+      }
     }
 
     const now = Date.now();
@@ -62,13 +73,18 @@ function extractRetryAfterMs(err: unknown): number | null {
 }
 
 /** Exponential backoff with full jitter starting at 2s; respects a duck-typed `retryAfterMs` on the error. */
-export async function withEmbeddingRetry<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+export async function withEmbeddingRetry<T>(
+  fn: () => Promise<T>,
+  maxAttempts = 3,
+): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {
       return await fn();
     } catch (err) {
       if (attempt >= maxAttempts) throw err;
-      const backoffMs = extractRetryAfterMs(err) ?? 2000 * 2 ** (attempt - 1) * (0.5 + Math.random() * 0.5);
+      const backoffMs =
+        extractRetryAfterMs(err) ??
+        2000 * 2 ** (attempt - 1) * (0.5 + Math.random() * 0.5);
       await sleep(backoffMs);
     }
   }
