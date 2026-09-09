@@ -26,26 +26,56 @@ export function truncateForEmbedding(text: string): string {
 }
 
 // transformers.js pads every sequence in a batch to the longest sequence in
-// that same batch before running inference, and attention cost is quadratic
-// in that padded length — so a batch's peak memory is driven by its longest
-// member, not its average. Real chunk lengths vary enough that a batch of 32
-// commonly contains at least one chunk near the 2048-token ceiling above,
-// which then forces all 32 to pay that chunk's full quadratic cost. Root-
-// caused via isolated reproduction (see docs/PROGRESS.md): a single
-// near-ceiling chunk alone peaks around 577 MB RSS, but a same-length batch
-// of 32 extrapolates to the ~14 GB spikes actually observed on an 8 GB
-// machine. Measured worst case (4 real chunks, each truncated to the 2048-
-// token ceiling) peaks at ~1.46 GB — a batch of 32 at that same worst case
-// would be roughly 8x that. 4 keeps worst-case peak memory well within an
-// 8 GB machine's budget; it costs throughput (more, smaller requests) but
-// nothing else, since the per-day request budget (900) has ample headroom.
-const MAX_BATCH_SIZE = 4;
+// that same batch before running inference, and attention cost is quadratic in
+// that padded length — so a batch's peak memory is driven by its longest member
+// (~ count * maxLen^2), not its average. Root-caused via isolated reproduction
+// (see docs/PROGRESS.md): a single near-ceiling chunk alone peaks ~577 MB RSS;
+// the measured worst case of 4 chunks each at the character ceiling peaks
+// ~1.46 GB, while a flat batch of 32 at that same worst case extrapolates to the
+// ~14 GB spikes that OOM an 8 GB machine.
+//
+// Phase 12.8: instead of a flat batch of 4, the indexer hands us up to
+// MAX_OUTER_BATCH chunks and we split them into length-bucketed sub-batches
+// whose padded cost (count * maxLen^2) never exceeds that proven-safe flat-4-at-
+// ceiling budget. Short chunks — the common case — pack dozens per sub-batch
+// (far fewer, larger inferences → higher throughput), while a near-ceiling chunk
+// is isolated, so peak memory stays where the flat-4 design already proved safe.
+const MAX_OUTER_BATCH = 64;
+export const EMBED_CHAR_CEILING = MAX_EMBED_TEXT_CHARS;
+export const SUBBATCH_PADDED_BUDGET = 4 * MAX_EMBED_TEXT_CHARS * MAX_EMBED_TEXT_CHARS;
+
+/**
+ * Group indices into memory-safe sub-batches. Sorted by length so each batch's
+ * members are similar, then greedily filled while `count * maxLen^2` stays within
+ * SUBBATCH_PADDED_BUDGET (a single chunk always fits — at the char ceiling its
+ * cost is 1/4 of the budget). Returns index groups; the caller places results
+ * back into input order. Pure — no I/O.
+ */
+export function planLengthBucketedBatches(lengths: number[]): number[][] {
+  const order = [...lengths.keys()].sort((a, b) => lengths[a]! - lengths[b]!);
+  const batches: number[][] = [];
+  let cur: number[] = [];
+  let curMaxLen = 0;
+  for (const i of order) {
+    const len = Math.max(1, lengths[i]!);
+    const candidateMax = Math.max(curMaxLen, len);
+    if (cur.length > 0 && (cur.length + 1) * candidateMax * candidateMax > SUBBATCH_PADDED_BUDGET) {
+      batches.push(cur);
+      cur = [];
+      curMaxLen = 0;
+    }
+    cur.push(i);
+    curMaxLen = Math.max(curMaxLen, len);
+  }
+  if (cur.length > 0) batches.push(cur);
+  return batches;
+}
 
 @Injectable()
 export class LocalEmbeddingProvider implements EmbeddingProvider {
   readonly id = `local:${MODEL_ID}`;
   readonly dimensions = 768 as const;
-  readonly maxBatchSize = MAX_BATCH_SIZE;
+  readonly maxBatchSize = MAX_OUTER_BATCH;
 
   private pipelinePromise: Promise<FeatureExtractionPipeline> | undefined;
 
@@ -70,7 +100,26 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
 
   private async embed(prefixed: string[]): Promise<number[][]> {
     const extractor = await this.getPipeline();
-    const output = await extractor(prefixed.map(truncateForEmbedding), { pooling: 'mean', normalize: true });
-    return output.tolist() as number[][];
+    const texts = prefixed.map(truncateForEmbedding);
+    const results = new Array<number[]>(texts.length);
+    // Process one length-bucketed sub-batch at a time so peak memory is bounded
+    // by the sub-batch budget, not the whole outer batch.
+    for (const group of planLengthBucketedBatches(texts.map((t) => t.length))) {
+      const output = await extractor(
+        group.map((i) => texts[i]!),
+        { pooling: 'mean', normalize: true },
+      );
+      const vectors = output.tolist() as number[][];
+      // The observed memory-pressure failure mode is a short/malformed pooled
+      // output — turn it into a loud, retryable error here (the indexer re-checks
+      // the full batch length and per-vector dimension too).
+      if (vectors.length !== group.length) {
+        throw new Error(`Embedding sub-batch returned ${vectors.length} vectors for ${group.length} inputs`);
+      }
+      group.forEach((idx, j) => {
+        results[idx] = vectors[j]!;
+      });
+    }
+    return results;
   }
 }
