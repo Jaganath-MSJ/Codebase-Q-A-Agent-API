@@ -36,7 +36,11 @@ export class ConfigService {
   }
 
   get llmCacheEnabled(): boolean {
-    return this.env.NODE_ENV !== 'production' && this.env.LLM_CACHE !== 'off';
+    // Enabled in prod too (Phase 12.3). Safe: the cache key is
+    // sha256(id+system+user+tools+priorTurns), and RAG's user prompt embeds the
+    // retrieved evidence, so a re-index that changes content changes the key.
+    // Disk-only under data/cache/llm, so the 0.5 GB Postgres budget is untouched.
+    return this.env.LLM_CACHE !== 'off';
   }
 
   get credentialKey(): string {

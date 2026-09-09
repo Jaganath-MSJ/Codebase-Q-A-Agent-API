@@ -11,6 +11,8 @@ import { buildTourMapPrompt, buildTourReducePrompt, parseTourSections, type Mark
 
 const TOP_N_FILES = 30;
 const MAP_BATCH_SIZE = 5;
+// Phase 12.4: medium output cap for the tour's map + reduce steps (tunable).
+const TOUR_MAX_TOKENS = 1024;
 
 @Injectable()
 export class TourService {
@@ -67,13 +69,13 @@ export class TourService {
     for (let i = 0; i < evidence.length; i += MAP_BATCH_SIZE) {
       const batch = evidence.slice(i, i + MAP_BATCH_SIZE);
       const { system, user } = buildTourMapPrompt(batch);
-      const result = await this.chatProvider.complete({ system, user });
+      const result = await this.chatProvider.complete({ system, user, maxTokens: TOUR_MAX_TOKENS });
       groupSummaries.push(result.text.trim());
     }
     if (groupSummaries.length === 0) return;
 
     const { system, user } = buildTourReducePrompt(groupSummaries);
-    const reduced = await this.chatProvider.complete({ system, user });
+    const reduced = await this.chatProvider.complete({ system, user, maxTokens: TOUR_MAX_TOKENS });
 
     const evidenceBlocks = evidence.map((e) => e.block);
     const sections = parseTourSections(reduced.text).map((section) => ({

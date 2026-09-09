@@ -89,12 +89,12 @@ export class CachingChatProvider implements ChatProvider {
 
   // Includes `tools`/`priorTurns` so every step of an agent loop — which
   // shares the same top-level system+user but differs in what happened
-  // since — gets its own cache entry. Both are undefined for every existing
-  // single-turn caller (condense/summarize/RAG), so their cache keys are
-  // byte-identical to before this change.
+  // since — gets its own cache entry. `maxTokens` is part of the key too
+  // (Phase 12.4): two otherwise-identical requests with different output caps
+  // can produce different (truncated) results, so they must not collide.
   private cachePath(req: ChatRequest): string {
     const key = sha256(
-      `${this.id}\x00${req.system}\x00${req.user}\x00${JSON.stringify(req.tools ?? null)}\x00${JSON.stringify(req.priorTurns ?? null)}`,
+      `${this.id}\x00${req.system}\x00${req.user}\x00${JSON.stringify(req.tools ?? null)}\x00${JSON.stringify(req.priorTurns ?? null)}\x00${req.maxTokens ?? ''}`,
     );
     return path.join(this.cacheDir, `${key}.json`);
   }

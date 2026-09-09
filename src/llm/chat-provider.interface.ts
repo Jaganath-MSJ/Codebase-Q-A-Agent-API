@@ -48,6 +48,13 @@ export interface ChatRequest {
   user: string;
   tools?: ToolDefinition[];
   priorTurns?: PriorTurn[];
+  /**
+   * Optional cap on generated (output) tokens — bounds latency and quota.
+   * Callers set an intent-appropriate value (generous for generation, small for
+   * condense/summary, medium for the tour). When the model hits it, the stop
+   * reason is 'length'. Omitted = provider default.
+   */
+  maxTokens?: number;
 }
 
 export type ChatStopReason = 'stop' | 'tool_use' | 'length' | 'error';

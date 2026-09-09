@@ -35,6 +35,7 @@ export class GroqChatProvider implements ChatProvider {
           { role: 'system', content: req.system },
           { role: 'user', content: req.user },
         ],
+        max_completion_tokens: req.maxTokens,
       },
       { signal },
     );
@@ -56,6 +57,7 @@ export class GroqChatProvider implements ChatProvider {
           { role: 'system', content: req.system },
           { role: 'user', content: req.user },
         ],
+        max_completion_tokens: req.maxTokens,
         stream: true,
       },
       { signal },

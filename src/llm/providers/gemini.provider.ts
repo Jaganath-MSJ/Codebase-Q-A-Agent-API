@@ -80,7 +80,7 @@ export class GeminiChatProvider implements ChatProvider {
     const response = await this.client.models.generateContent({
       model: MODEL_ID,
       contents: req.user,
-      config: { systemInstruction: req.system, abortSignal: signal },
+      config: { systemInstruction: req.system, abortSignal: signal, maxOutputTokens: req.maxTokens },
     });
 
     return {
@@ -99,6 +99,7 @@ export class GeminiChatProvider implements ChatProvider {
       config: {
         systemInstruction: req.system,
         abortSignal: signal,
+        maxOutputTokens: req.maxTokens,
         tools: req.tools?.length ? [{ functionDeclarations: req.tools.map(toFunctionDeclaration) }] : undefined,
       },
     });

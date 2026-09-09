@@ -31,6 +31,15 @@ const FLUSH_INTERVAL_MS = 400;
 const CONDENSATION_WINDOW = 2;
 const GENERATION_WINDOW = 3;
 const SUMMARY_TRIGGER_EXCHANGES = 6;
+// Phase 12.4 output caps (tunable). Generation is generous — a full cited answer
+// must fit; condense (a one-line standalone query) and summary (a rolling digest)
+// are short by intent. NOTE: gemini-flash-latest counts its internal "thinking"
+// tokens against maxOutputTokens (measured: a 256 cap left only ~11 output
+// tokens), so the "small" caps sit above that overhead — dropping condense to
+// ~256 silently empties the condensed query on Gemini.
+const GENERATION_MAX_TOKENS = 2048;
+const CONDENSE_MAX_TOKENS = 512;
+const SUMMARY_MAX_TOKENS = 768;
 
 export interface SourceRef {
   marker: number;
@@ -384,7 +393,10 @@ export class ChatService {
           toPromptExchange,
         );
         const { system, user } = buildCondensationPrompt(condensationWindow, question);
-        const condensed = await this.chatProvider.complete({ system, user }, signal);
+        const condensed = await this.chatProvider.complete(
+          { system, user, maxTokens: CONDENSE_MAX_TOKENS },
+          signal,
+        );
         if (signal.aborted) return;
         if (condensed.text.trim()) retrievalQuery = condensed.text.trim();
       }
@@ -445,7 +457,10 @@ export class ChatService {
       let lastFlushAt = startedAt;
       let usage: ChatUsage = {};
 
-      for await (const event of this.chatProvider.stream({ system: SYSTEM_PROMPT, user }, signal)) {
+      for await (const event of this.chatProvider.stream(
+        { system: SYSTEM_PROMPT, user, maxTokens: GENERATION_MAX_TOKENS },
+        signal,
+      )) {
         if (event.type === 'text') {
           buffer += event.delta;
           yield { type: 'token', data: { delta: event.delta } };
@@ -609,7 +624,10 @@ export class ChatService {
     if (evicted.length === 0) return;
 
     const { system, user } = buildSummaryPrompt(conversation.summary, evicted.map(toPromptExchange));
-    const summarized = await this.chatProvider.complete({ system, user }, signal);
+    const summarized = await this.chatProvider.complete(
+      { system, user, maxTokens: SUMMARY_MAX_TOKENS },
+      signal,
+    );
     const newSummary = summarized.text.trim();
     if (!newSummary) return;
 

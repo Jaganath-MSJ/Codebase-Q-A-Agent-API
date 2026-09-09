@@ -9,6 +9,10 @@ const MAX_STEPS = 8;
 // whole growing conversation, so input tokens alone can blow past a sane
 // budget well before 8 steps on a chatty model. Checked between steps.
 const MAX_TOTAL_TOKENS = 50_000;
+// Phase 12.4: generous per-step output cap — a step may emit the full final
+// answer, so match the RAG generation cap. (MAX_TOTAL_TOKENS still bounds the
+// whole loop across steps.)
+const AGENT_MAX_TOKENS = 2048;
 // A `list_files`-style tool on a large repo can otherwise return tens of
 // thousands of tokens and blow the context in one call.
 const TOOL_RESULT_TRUNCATE_CHARS = 4000;
@@ -70,7 +74,7 @@ export async function* runAgentLoop(
     let stopReason: ChatStopReason = 'stop';
 
     for await (const event of chatProvider.stream(
-      { system, user: question, tools: toolRegistry.definitions, priorTurns },
+      { system, user: question, tools: toolRegistry.definitions, priorTurns, maxTokens: AGENT_MAX_TOKENS },
       signal,
     )) {
       if (event.type === 'text') {
