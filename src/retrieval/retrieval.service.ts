@@ -69,6 +69,43 @@ export class RetrievalService {
     return this.vectorRetriever.search(projectId, queryVector, limit);
   }
 
+  /** Embed a query once (Phase 12.11) so a multi-project fan-out can reuse the vector. */
+  async embedQuery(query: string): Promise<number[]> {
+    return this.embeddingProvider.embedQuery(query);
+  }
+
+  /**
+   * Hybrid search with a caller-supplied query vector — the multi-project fan-out
+   * path, which embeds the query ONCE and reuses it across projects instead of
+   * re-embedding per project. The vector was produced by the active provider, so
+   * a project indexed with a different embedding model still throws (caught and
+   * isolated per-project by the caller), keeping the model-match invariant intact.
+   */
+  async searchWithQueryVector(
+    projectId: string,
+    query: string,
+    queryVector: number[],
+    limit = 20,
+  ): Promise<ScoredChunk[]> {
+    const project = await this.projectsRepository.findById(projectId);
+    if (!project) throw new NotFoundException(`Project ${projectId} not found`);
+
+    if (project.status !== 'ready') {
+      throw new BadRequestException(
+        `Project '${project.name}' is not ready for search (status: ${project.status}). Index it first.`,
+      );
+    }
+
+    if (project.embeddingModel !== this.embeddingProvider.id) {
+      throw new BadRequestException(
+        `Project '${project.name}' was indexed with embedding model '${project.embeddingModel}', ` +
+          `but the active provider is '${this.embeddingProvider.id}'. This project needs re-indexing.`,
+      );
+    }
+
+    return this.hybridRetriever.search(projectId, query, queryVector, limit);
+  }
+
   /** Exact identifier match, grouped by file by the caller — see `ReferencesRetriever`. */
   async findReferences(projectId: string, symbol: string): Promise<ScoredChunk[]> {
     const project = await this.projectsRepository.findById(projectId);

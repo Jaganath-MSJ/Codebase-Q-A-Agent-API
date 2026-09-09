@@ -565,10 +565,17 @@ export class ChatService {
     query: string,
     limit: number,
   ): Promise<ScoredChunkWithProject[]> {
+    // Embed the query ONCE for the whole fan-out (Phase 12.11); each per-project
+    // hybrid search reuses this vector instead of re-embedding M times.
+    const queryVector = await this.retrievalService.embedQuery(query);
+
     const perProject = await Promise.all(
       projectIds.map(async (projectId) => {
         try {
-          return { projectId, chunks: await this.retrievalService.search(projectId, query, 'hybrid', limit) };
+          return {
+            projectId,
+            chunks: await this.retrievalService.searchWithQueryVector(projectId, query, queryVector, limit),
+          };
         } catch (err) {
           this.logger.warn(
             `Multi-project retrieval skipped project ${projectId}: ${err instanceof Error ? err.message : String(err)}`,

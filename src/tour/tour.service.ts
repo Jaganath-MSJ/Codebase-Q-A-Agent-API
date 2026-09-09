@@ -4,7 +4,6 @@ import { ChunksRepository } from '../db/repositories/chunks.repository';
 import type { TourRecord } from '../db/schema';
 import { CHAT_PROVIDER_TOKEN } from '../llm/llm.module';
 import type { ChatProvider } from '../llm/chat-provider.interface';
-import { EventBusService } from '../events/event-bus.service';
 import { parseCitations } from '../common/citation-parser';
 import { rankFiles, type RankableFile } from './file-ranking';
 import { buildTourMapPrompt, buildTourReducePrompt, parseTourSections, type MarkedEvidence } from './tour-prompts';
@@ -17,25 +16,36 @@ const TOUR_MAX_TOKENS = 1024;
 @Injectable()
 export class TourService {
   private readonly logger = new Logger(TourService.name);
+  // Projects whose generation is in flight — keeps the client's ~3s GET poll
+  // from launching concurrent generations while the first is still running.
+  private readonly inFlight = new Set<string>();
 
   constructor(
     private readonly projectsRepository: ProjectsRepository,
     private readonly chunksRepository: ChunksRepository,
     @Inject(CHAT_PROVIDER_TOKEN) private readonly chatProvider: ChatProvider,
-    eventBus: EventBusService,
-  ) {
-    // `job.completed` fires for every outcome (succeeded, failed, canceled,
-    // paused) — generate() itself decides whether there's anything to do.
-    eventBus.on('job.completed').subscribe(({ projectId }) => {
-      this.generate(projectId).catch((err) => {
-        this.logger.error(`Tour generation failed for project ${projectId}: ${String(err)}`);
-      });
-    });
-  }
+  ) {}
 
   async getTour(projectId: string): Promise<TourRecord | null> {
     const project = await this.projectsRepository.findById(projectId);
-    return project?.tour ?? null;
+    if (!project) return null;
+    const tour = project.tour ?? null;
+    // On-demand (Phase 12.12): rather than generate eagerly on job.completed
+    // (~7 model calls on every first index), kick off generation when the panel
+    // first polls GET and there's no tour for the current revision. The client
+    // keeps polling until `generatedAt` moves.
+    if (project.status === 'ready' && project.headRevision && tour?.revision !== project.headRevision) {
+      this.ensureGenerating(projectId);
+    }
+    return tour;
+  }
+
+  private ensureGenerating(projectId: string): void {
+    if (this.inFlight.has(projectId)) return;
+    this.inFlight.add(projectId);
+    this.generate(projectId)
+      .catch((err) => this.logger.error(`Tour generation failed for project ${projectId}: ${String(err)}`))
+      .finally(() => this.inFlight.delete(projectId));
   }
 
   async generate(projectId: string, force = false): Promise<void> {

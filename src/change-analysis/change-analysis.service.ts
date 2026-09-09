@@ -5,7 +5,6 @@ import { RetrievalService } from '../retrieval/retrieval.service';
 import type { ChangeAnalysisRecord } from '../db/schema';
 import { CHAT_PROVIDER_TOKEN } from '../llm/llm.module';
 import type { ChatProvider } from '../llm/chat-provider.interface';
-import { EventBusService } from '../events/event-bus.service';
 import { parseCitations } from '../common/citation-parser';
 import { lastCommitDiff } from '../sources/git-clone';
 import {
@@ -28,23 +27,36 @@ const MAX_CALLERS_PER_FILE = 5;
 export class ChangeAnalysisService {
   private readonly logger = new Logger(ChangeAnalysisService.name);
 
+  // Projects whose generation is in flight — dedupes the client's ~3s GET poll.
+  private readonly inFlight = new Set<string>();
+
   constructor(
     private readonly projectsRepository: ProjectsRepository,
     private readonly chunksRepository: ChunksRepository,
     private readonly retrievalService: RetrievalService,
     @Inject(CHAT_PROVIDER_TOKEN) private readonly chatProvider: ChatProvider,
-    eventBus: EventBusService,
-  ) {
-    eventBus.on('job.completed').subscribe(({ projectId }) => {
-      this.generate(projectId).catch((err) => {
-        this.logger.error(`Change analysis failed for project ${projectId}: ${String(err)}`);
-      });
-    });
-  }
+  ) {}
 
   async getAnalysis(projectId: string): Promise<ChangeAnalysisRecord | null> {
     const project = await this.projectsRepository.findById(projectId);
-    return project?.changeAnalysis ?? null;
+    if (!project) return null;
+    const analysis = project.changeAnalysis ?? null;
+    // On-demand (Phase 12.12): only git projects ever get a change analysis (see
+    // generate's gate), so only they trigger. Kick off when the panel first polls
+    // and there's nothing for the current revision; the client polls until it lands.
+    const isGit = project.sourceKind === 'git_url' || project.sourceKind === 'git_private';
+    if (isGit && project.status === 'ready' && project.headRevision && analysis?.revision !== project.headRevision) {
+      this.ensureGenerating(projectId);
+    }
+    return analysis;
+  }
+
+  private ensureGenerating(projectId: string): void {
+    if (this.inFlight.has(projectId)) return;
+    this.inFlight.add(projectId);
+    this.generate(projectId)
+      .catch((err) => this.logger.error(`Change analysis failed for project ${projectId}: ${String(err)}`))
+      .finally(() => this.inFlight.delete(projectId));
   }
 
   async generate(projectId: string, force = false): Promise<void> {
