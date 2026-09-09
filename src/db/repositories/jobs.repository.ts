@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, gte, lt, or, sql, sum } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lt, or, sql, sum } from 'drizzle-orm';
 import type { Db } from '../pool';
 import { DB_TOKEN } from '../tokens';
 import { indexingJobs, IndexingJobRow, NewIndexingJobRow } from '../schema';
@@ -39,6 +39,21 @@ export class JobsRepository {
       .orderBy(desc(indexingJobs.createdAt))
       .limit(1);
     return row;
+  }
+
+  /**
+   * The latest job for each of `projectIds` in ONE query (Phase 12.16) — DISTINCT
+   * ON keeps, per project, the row that sorts first under `project_id, created_at
+   * DESC`, i.e. the most recent. Lets the projects list embed each row's latest
+   * job so the dashboard doesn't fetch one per project.
+   */
+  async findLatestByProjectIds(projectIds: string[]): Promise<IndexingJobRow[]> {
+    if (projectIds.length === 0) return [];
+    return this.db
+      .selectDistinctOn([indexingJobs.projectId])
+      .from(indexingJobs)
+      .where(inArray(indexingJobs.projectId, projectIds))
+      .orderBy(indexingJobs.projectId, desc(indexingJobs.createdAt));
   }
 
   async findById(id: string): Promise<IndexingJobRow | undefined> {

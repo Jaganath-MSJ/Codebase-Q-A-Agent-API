@@ -42,6 +42,12 @@ export class JobsService {
     return this.jobsRepository.findLatestByProject(projectId);
   }
 
+  /** Latest job per project, keyed by projectId — one query for the whole list (Phase 12.16). */
+  async findLatestForProjects(projectIds: string[]): Promise<Map<string, IndexingJobRow>> {
+    const rows = await this.jobsRepository.findLatestByProjectIds(projectIds);
+    return new Map(rows.map((row) => [row.projectId, row]));
+  }
+
   /** Returns null if the job doesn't exist or is already in a terminal state. */
   async cancel(jobId: string): Promise<'canceled' | 'canceling' | null> {
     return this.jobsRepository.requestCancel(jobId);

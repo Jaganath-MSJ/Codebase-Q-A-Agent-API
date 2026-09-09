@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { JobDto } from './job.dto';
 
 export class CreateProjectDto {
   @ApiProperty({ description: 'Display name for the project' })
@@ -67,4 +68,12 @@ export class ProjectDto {
 
   @ApiProperty()
   createdAt!: string;
+
+  @ApiProperty({
+    type: () => JobDto,
+    nullable: true,
+    description:
+      'Latest indexing job for this project (Phase 12.16), or null if never indexed — lets the dashboard read job state from the list instead of one fetch per project',
+  })
+  latestJob!: JobDto | null;
 }

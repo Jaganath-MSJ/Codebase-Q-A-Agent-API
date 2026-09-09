@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import compression from 'compression';
 import { AppModule } from './app.module';
 
 // Backstop for fire-and-forget background work (the setInterval pollers in
@@ -14,6 +15,21 @@ process.on('unhandledRejection', (reason) => {
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // gzip JSON responses (Phase 12.15). CRITICAL: never compress SSE — compression
+  // buffers the response, which would stall the chat and indexing streams that
+  // depend on token-by-token flushing. Everything else uses the default filter.
+  app.use(
+    compression({
+      filter: (req, res) => {
+        const contentType = res.getHeader('Content-Type');
+        if (typeof contentType === 'string' && contentType.includes('text/event-stream')) {
+          return false;
+        }
+        return compression.filter(req, res);
+      },
+    }),
+  );
 
   app.setGlobalPrefix('api');
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));

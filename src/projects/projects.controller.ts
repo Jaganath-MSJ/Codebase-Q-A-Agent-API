@@ -16,7 +16,7 @@ import {
 } from '../contracts';
 import { ProjectRow } from '../db/schema';
 
-function toDto(row: ProjectRow): ProjectDto {
+function toDto(row: ProjectRow, latestJob: JobDto | null = null): ProjectDto {
   return {
     id: row.id,
     name: row.name,
@@ -27,6 +27,7 @@ function toDto(row: ProjectRow): ProjectDto {
     chunkCount: row.chunkCount,
     overview: row.overview,
     createdAt: row.createdAt.toISOString(),
+    latestJob,
   };
 }
 
@@ -51,7 +52,13 @@ export class ProjectsController {
   @ApiOkResponse({ type: ProjectDto, isArray: true })
   async findAll(): Promise<ProjectDto[]> {
     const rows = await this.projectsService.findAll();
-    return rows.map(toDto);
+    // One batched query for every project's latest job (Phase 12.16) so the
+    // dashboard reads job state from this list instead of a fetch per row.
+    const latest = await this.jobsService.findLatestForProjects(rows.map((r) => r.id));
+    return rows.map((row) => {
+      const job = latest.get(row.id);
+      return toDto(row, job ? toJobDto(job) : null);
+    });
   }
 
   @Post(':id/index')
