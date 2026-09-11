@@ -4,14 +4,13 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
-  NotFoundException,
   Param,
   Post,
 } from '@nestjs/common';
 import { ApiAcceptedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import type { TourRecord } from '../db/schema';
 import { TourService } from './tour.service';
-import { TourDto, TourGenerateResponseDto } from '../contracts';
+import { TourDto, TourGenerateResponseDto, TourStatusDto } from '../contracts';
 
 function toTourDto(record: TourRecord): TourDto {
   return { summary: record.summary, sections: record.sections, generatedAt: record.generatedAt };
@@ -25,11 +24,12 @@ export class TourController {
   constructor(private readonly tourService: TourService) {}
 
   @Get()
-  @ApiOkResponse({ type: TourDto })
-  async get(@Param('id') id: string): Promise<TourDto> {
-    const tour = await this.tourService.getTour(id);
-    if (!tour) throw new NotFoundException(`No tour generated yet for project ${id}`);
-    return toTourDto(tour);
+  @ApiOkResponse({ type: TourStatusDto })
+  async get(@Param('id') id: string): Promise<TourStatusDto> {
+    // Always 200 with a status envelope (Phase 13.5) — no 404 for "not yet",
+    // so the client can tell 'generating' (keep polling) from 'absent' (stop).
+    const { tour, status } = await this.tourService.getTourStatus(id);
+    return { status, tour: tour ? toTourDto(tour) : null };
   }
 
   @Post()

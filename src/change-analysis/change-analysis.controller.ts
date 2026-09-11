@@ -4,14 +4,17 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
-  NotFoundException,
   Param,
   Post,
 } from '@nestjs/common';
 import { ApiAcceptedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import type { ChangeAnalysisRecord } from '../db/schema';
 import { ChangeAnalysisService } from './change-analysis.service';
-import { ChangeAnalysisDto, ChangeAnalysisGenerateResponseDto } from '../contracts';
+import {
+  ChangeAnalysisDto,
+  ChangeAnalysisGenerateResponseDto,
+  ChangeAnalysisStatusDto,
+} from '../contracts';
 
 function toChangeAnalysisDto(record: ChangeAnalysisRecord): ChangeAnalysisDto {
   return {
@@ -32,11 +35,12 @@ export class ChangeAnalysisController {
   constructor(private readonly changeAnalysisService: ChangeAnalysisService) {}
 
   @Get()
-  @ApiOkResponse({ type: ChangeAnalysisDto })
-  async get(@Param('id') id: string): Promise<ChangeAnalysisDto> {
-    const analysis = await this.changeAnalysisService.getAnalysis(id);
-    if (!analysis) throw new NotFoundException(`No change analysis generated yet for project ${id}`);
-    return toChangeAnalysisDto(analysis);
+  @ApiOkResponse({ type: ChangeAnalysisStatusDto })
+  async get(@Param('id') id: string): Promise<ChangeAnalysisStatusDto> {
+    // Always 200 with a status envelope (Phase 13.5) — no 404 for "not yet",
+    // so the client can tell 'generating' (keep polling) from 'absent' (stop).
+    const { analysis, status } = await this.changeAnalysisService.getAnalysisStatus(id);
+    return { status, analysis: analysis ? toChangeAnalysisDto(analysis) : null };
   }
 
   @Post()

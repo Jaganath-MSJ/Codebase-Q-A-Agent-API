@@ -21,14 +21,14 @@ describe('ChangeAnalysisService on-demand generation (Phase 12.12)', () => {
   it('triggers for a git project with no analysis for the current revision', async () => {
     const svc = build({ id: 'p1', status: 'ready', headRevision: REV, sourceKind: 'git_url', changeAnalysis: null });
     const gen = vi.spyOn(svc, 'generate').mockResolvedValue(undefined);
-    expect(await svc.getAnalysis('p1')).toBeNull();
+    expect((await svc.getAnalysisStatus('p1')).analysis).toBeNull();
     expect(gen).toHaveBeenCalledWith('p1');
   });
 
   it('does NOT trigger for a non-git project (change analysis never applies)', async () => {
     const svc = build({ id: 'p1', status: 'ready', headRevision: REV, sourceKind: 'local_path', changeAnalysis: null });
     const gen = vi.spyOn(svc, 'generate').mockResolvedValue(undefined);
-    await svc.getAnalysis('p1');
+    await svc.getAnalysisStatus('p1');
     expect(gen).not.toHaveBeenCalled();
   });
 
@@ -36,7 +36,7 @@ describe('ChangeAnalysisService on-demand generation (Phase 12.12)', () => {
     const analysis = { revision: REV, commitHash: 'h', commitMessage: 'm', changedFiles: [], summary: '', citations: [], generatedAt: 'x' };
     const svc = build({ id: 'p1', status: 'ready', headRevision: REV, sourceKind: 'git_url', changeAnalysis: analysis });
     const gen = vi.spyOn(svc, 'generate').mockResolvedValue(undefined);
-    expect(await svc.getAnalysis('p1')).toEqual(analysis);
+    expect((await svc.getAnalysisStatus('p1')).analysis).toEqual(analysis);
     expect(gen).not.toHaveBeenCalled();
   });
 
@@ -44,9 +44,35 @@ describe('ChangeAnalysisService on-demand generation (Phase 12.12)', () => {
     const svc = build({ id: 'p1', status: 'ready', headRevision: REV, sourceKind: 'git_private', changeAnalysis: null });
     let resolve!: () => void;
     const gen = vi.spyOn(svc, 'generate').mockReturnValue(new Promise<void>((r) => (resolve = () => r())));
-    await svc.getAnalysis('p1');
-    await svc.getAnalysis('p1');
+    await svc.getAnalysisStatus('p1');
+    await svc.getAnalysisStatus('p1');
     expect(gen).toHaveBeenCalledOnce();
     resolve();
+  });
+});
+
+const flush = () => new Promise((r) => setTimeout(r, 0));
+
+describe('ChangeAnalysisService status envelope (Phase 13.5)', () => {
+  it("reports 'ready' with the analysis when a fresh one exists", async () => {
+    const analysis = { revision: REV, commitHash: 'h', commitMessage: 'm', changedFiles: [], summary: '', citations: [], generatedAt: 'x' };
+    const svc = build({ id: 'p1', status: 'ready', headRevision: REV, sourceKind: 'git_url', changeAnalysis: analysis });
+    expect(await svc.getAnalysisStatus('p1')).toEqual({ analysis, status: 'ready' });
+  });
+
+  it("reports 'absent' for a non-git project (analysis never applies) without triggering", async () => {
+    const svc = build({ id: 'p1', status: 'ready', headRevision: REV, sourceKind: 'local_path', changeAnalysis: null });
+    const gen = vi.spyOn(svc, 'generate').mockResolvedValue(undefined);
+    expect(await svc.getAnalysisStatus('p1')).toEqual({ analysis: null, status: 'absent' });
+    expect(gen).not.toHaveBeenCalled();
+  });
+
+  it("reports 'generating' on the kickoff poll, then 'absent' once the attempt produced nothing", async () => {
+    const svc = build({ id: 'p1', status: 'ready', headRevision: REV, sourceKind: 'git_url', changeAnalysis: null });
+    const gen = vi.spyOn(svc, 'generate').mockResolvedValue(undefined);
+    expect((await svc.getAnalysisStatus('p1')).status).toBe('generating');
+    await flush();
+    expect(await svc.getAnalysisStatus('p1')).toEqual({ analysis: null, status: 'absent' });
+    expect(gen).toHaveBeenCalledOnce();
   });
 });

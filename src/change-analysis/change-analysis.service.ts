@@ -12,6 +12,7 @@ import {
   type ChangedFileDiff,
   type ChangeEvidenceBlock,
 } from './change-analysis.prompts';
+import type { ChangeAnalysisStatus } from '../contracts';
 
 // A commit touching an unusually large number of files (a formatter run, a
 // dependency bump) would otherwise blow up evidence size and cost for
@@ -29,6 +30,10 @@ export class ChangeAnalysisService {
 
   // Projects whose generation is in flight — dedupes the client's ~3s GET poll.
   private readonly inFlight = new Set<string>();
+  // The revision each project was last generated FOR (once it completed) — lets a
+  // GET that still finds no fresh analysis report 'absent' instead of re-triggering
+  // forever and driving the client's poll without end (Phase 13.5).
+  private readonly attemptedRevision = new Map<string, string>();
 
   constructor(
     private readonly projectsRepository: ProjectsRepository,
@@ -37,26 +42,43 @@ export class ChangeAnalysisService {
     @Inject(CHAT_PROVIDER_TOKEN) private readonly chatProvider: ChatProvider,
   ) {}
 
-  async getAnalysis(projectId: string): Promise<ChangeAnalysisRecord | null> {
+  /**
+   * The analysis plus whether one is coming, so the client knows when to stop
+   * polling (Phase 13.5). Only git projects ever generate; a non-git project
+   * therefore reports 'absent' immediately. Otherwise: 'generating' while an
+   * attempt is in flight, 'ready' once a fresh one lands, 'absent' once an
+   * attempt for this revision finished producing nothing.
+   */
+  async getAnalysisStatus(
+    projectId: string,
+  ): Promise<{ analysis: ChangeAnalysisRecord | null; status: ChangeAnalysisStatus }> {
     const project = await this.projectsRepository.findById(projectId);
-    if (!project) return null;
+    if (!project) return { analysis: null, status: 'absent' };
     const analysis = project.changeAnalysis ?? null;
-    // On-demand (Phase 12.12): only git projects ever get a change analysis (see
-    // generate's gate), so only they trigger. Kick off when the panel first polls
-    // and there's nothing for the current revision; the client polls until it lands.
-    const isGit = project.sourceKind === 'git_url' || project.sourceKind === 'git_private';
-    if (isGit && project.status === 'ready' && project.headRevision && analysis?.revision !== project.headRevision) {
-      this.ensureGenerating(projectId);
+
+    if (analysis && project.headRevision && analysis.revision === project.headRevision) {
+      return { analysis, status: 'ready' };
     }
-    return analysis;
+    if (this.inFlight.has(projectId)) return { analysis, status: 'generating' };
+
+    const isGit = project.sourceKind === 'git_url' || project.sourceKind === 'git_private';
+    const canGenerate = isGit && project.status === 'ready' && !!project.headRevision;
+    if (canGenerate && this.attemptedRevision.get(projectId) !== project.headRevision) {
+      this.ensureGenerating(projectId, project.headRevision!);
+      return { analysis, status: 'generating' };
+    }
+    return { analysis, status: 'absent' };
   }
 
-  private ensureGenerating(projectId: string): void {
+  private ensureGenerating(projectId: string, revision: string): void {
     if (this.inFlight.has(projectId)) return;
     this.inFlight.add(projectId);
     this.generate(projectId)
       .catch((err) => this.logger.error(`Change analysis failed for project ${projectId}: ${String(err)}`))
-      .finally(() => this.inFlight.delete(projectId));
+      .finally(() => {
+        this.inFlight.delete(projectId);
+        this.attemptedRevision.set(projectId, revision);
+      });
   }
 
   async generate(projectId: string, force = false): Promise<void> {

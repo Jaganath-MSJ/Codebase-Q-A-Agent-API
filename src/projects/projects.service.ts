@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 import { CredentialsService } from '../credentials/credentials.service';
 import { ProjectsRepository } from '../db/repositories/projects.repository';
@@ -104,9 +105,21 @@ export class ProjectsService {
     startLine: number,
     endLine: number,
     context: number,
-  ): Promise<FileViewDto> {
+    ifNoneMatch?: string,
+  ): Promise<{ etag: string; dto: FileViewDto | null }> {
     const project = await this.projectsRepository.findById(projectId);
     if (!project) throw new NotFoundException(`Project ${projectId} not found`);
+
+    // Strong validator (Phase 13.6): file content is immutable within an index,
+    // so headRevision (the content-tree hash, bumped on every re-index) plus the
+    // exact view coordinates uniquely identify this response. A matching
+    // If-None-Match therefore lets us answer 304 without even reading the file.
+    const marker = project.headRevision ?? '';
+    const etag = `"${createHash('sha256')
+      .update(`${marker}|${relPath}|${startLine}|${endLine}|${context}`)
+      .digest('hex')
+      .slice(0, 32)}"`;
+    if (ifNoneMatch && ifNoneMatch === etag) return { etag, dto: null };
 
     // `workspacePath` is where the adapter actually put the files on disk —
     // for git_url that's `data/workspaces/<id>`, not the clone URL in
@@ -134,12 +147,15 @@ export class ProjectsService {
     const contextEnd = Math.min(lines.length, endLine + context);
 
     return {
-      path: relPath,
-      startLine,
-      endLine,
-      contextStart,
-      contextEnd,
-      lines: lines.slice(contextStart - 1, contextEnd),
+      etag,
+      dto: {
+        path: relPath,
+        startLine,
+        endLine,
+        contextStart,
+        contextEnd,
+        lines: lines.slice(contextStart - 1, contextEnd),
+      },
     };
   }
 }

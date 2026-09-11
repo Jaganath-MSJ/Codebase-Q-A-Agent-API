@@ -1,5 +1,6 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Query, Req, Res } from '@nestjs/common';
 import { ApiOkResponse, ApiCreatedResponse, ApiAcceptedResponse, ApiNoContentResponse, ApiTags } from '@nestjs/swagger';
+import type { Request, Response } from 'express';
 import { ProjectsService } from './projects.service';
 import { JobsService } from '../jobs/jobs.service';
 import { IndexingService } from '../indexing/indexing.service';
@@ -77,14 +78,32 @@ export class ProjectsController {
 
   @Get(':id/file')
   @ApiOkResponse({ type: FileViewDto })
-  async getFile(@Param('id') id: string, @Query() query: FileQueryDto): Promise<FileViewDto> {
-    return this.projectsService.getFile(
+  async getFile(
+    @Param('id') id: string,
+    @Query() query: FileQueryDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { etag, dto } = await this.projectsService.getFile(
       id,
       query.path,
       query.startLine,
       query.endLine,
       query.context ?? 20,
+      req.headers['if-none-match'],
     );
+    // Source content is immutable within an index, so revalidate cheaply via the
+    // ETag on a cold reload / cross-session (Phase 13.6) — in-session, the web's
+    // staleTime:Infinity (13.2) already avoids the request. `private`: user-scoped
+    // source, never shared-cached; `max-age=0, must-revalidate`: always check the
+    // ETag, which a matching If-None-Match answers with a 304 (no disk read, no body).
+    res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+    res.setHeader('ETag', etag);
+    if (!dto) {
+      res.status(HttpStatus.NOT_MODIFIED).end();
+      return;
+    }
+    res.status(HttpStatus.OK).json(dto);
   }
 
   @Get(':id/storage')
