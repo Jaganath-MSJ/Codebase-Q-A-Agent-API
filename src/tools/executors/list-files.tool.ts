@@ -4,6 +4,9 @@ import type { ToolExecutionResult } from '../tool-executor.interface';
 import { matchesGlob } from '../../common/glob';
 
 const MAX_RESULTS = 200;
+// The matcher is linear-time and safe against pathological patterns, but a
+// wildly long glob is never a legitimate model request — reject it cheaply.
+const MAX_GLOB_LENGTH = 256;
 
 export const LIST_FILES_TOOL: ToolDefinition = {
   name: 'list_files',
@@ -25,6 +28,8 @@ export async function listFilesTool(
 ): Promise<ToolExecutionResult> {
   const glob = typeof args.glob === 'string' ? args.glob.trim() : '';
   if (!glob) return { regions: [], note: 'Error: list_files requires a non-empty "glob" string argument.' };
+  if (glob.length > MAX_GLOB_LENGTH)
+    return { regions: [], note: `Error: list_files "glob" is too long (max ${MAX_GLOB_LENGTH} characters).` };
 
   const files = await filesRepository.findAllByProjectId(projectId);
   const matches = files.map((f) => f.path).filter((path) => matchesGlob(path, glob)).sort();

@@ -48,9 +48,6 @@ export class ProjectDto {
   sourceKind!: string;
 
   @ApiProperty()
-  sourceRef!: string;
-
-  @ApiProperty()
   status!: string;
 
   @ApiProperty()

@@ -32,4 +32,35 @@ describe('matchesGlob', () => {
     expect(matchesGlob('src/auth.controller.ts', 'src/**/*.controller.ts')).toBe(true);
     expect(matchesGlob('src/auth.service.ts', 'src/**/*.controller.ts')).toBe(false);
   });
+
+  it('handles ** matching everything and **/x at the root', () => {
+    expect(matchesGlob('a/b/c', '**')).toBe(true);
+    expect(matchesGlob('x', '**/x')).toBe(true);
+    expect(matchesGlob('a/b/x', '**/x')).toBe(true);
+  });
+
+  it('matches a star against an empty run and the empty pattern against the empty path', () => {
+    expect(matchesGlob('', '')).toBe(true);
+    expect(matchesGlob('a', '')).toBe(false);
+    expect(matchesGlob('', '*')).toBe(true);
+    expect(matchesGlob('', '**')).toBe(true);
+  });
+
+  it('backtracks correctly across differing star kinds', () => {
+    // A greedy last-star-only matcher gets this wrong; the DP must not.
+    expect(matchesGlob('a/bx', '**/*x')).toBe(true);
+    // `*` cannot cross a slash, so one literal slash in the pattern != two in the path.
+    expect(matchesGlob('a/b/c.ts', '*/*.ts')).toBe(false);
+  });
+
+  it('does not backtrack catastrophically on a pathological, non-matching pattern', () => {
+    // A regex built by concatenating one `[^/]*` per `*` would hang here for
+    // minutes; the linear matcher must return quickly. `!` never appears in the
+    // input, so the match is false.
+    const path = 'a'.repeat(64);
+    const pattern = '*a'.repeat(40) + '!';
+    const start = performance.now();
+    expect(matchesGlob(path, pattern)).toBe(false);
+    expect(performance.now() - start).toBeLessThan(1000);
+  });
 });

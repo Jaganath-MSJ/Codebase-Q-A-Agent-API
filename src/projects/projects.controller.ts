@@ -22,7 +22,6 @@ function toDto(row: ProjectRow, latestJob: JobDto | null = null): ProjectDto {
     id: row.id,
     name: row.name,
     sourceKind: row.sourceKind,
-    sourceRef: row.sourceRef,
     status: row.status,
     fileCount: row.fileCount,
     chunkCount: row.chunkCount,
