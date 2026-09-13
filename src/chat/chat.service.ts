@@ -19,6 +19,7 @@ import {
   type EvidenceBlock,
 } from './prompt.builder';
 import { parseCitations, type Citation } from '../common/citation-parser';
+import { redactSecrets } from '../common/redact';
 import { buildConversationMarkdown, type ExportCitation, type ExportMessage } from '../common/conversation-markdown';
 import { evictedExchanges, recentWindow, toExchanges, truncateAnswer, type Exchange } from './conversation-context';
 import { runAgentLoop } from './agent.loop';
@@ -251,6 +252,7 @@ export class ChatService {
       let trace: unknown[] = [];
       let stopReason: string = 'stop';
       let evidence: EvidenceEntry[] = [];
+      let servedBy: string | undefined;
       let lastFlushAt = startedAt;
 
       for await (const event of runAgentLoop(
@@ -275,6 +277,7 @@ export class ChatService {
           trace = event.trace;
           stopReason = event.stopReason;
           evidence = event.evidence;
+          servedBy = event.servedBy;
         }
       }
 
@@ -303,12 +306,12 @@ export class ChatService {
 
       const citations = parseCitations(buffer, evidence);
       const latencyMs = Date.now() - startedAt;
-      const [providerName, ...modelParts] = this.chatProvider.id.split(':');
+      const { provider, model } = this.splitProviderId(servedBy ?? this.chatProvider.id);
 
       await this.messagesRepository.completeAssistant(assistantMessage.id, {
         content: buffer,
-        provider: providerName ?? this.chatProvider.id,
-        model: modelParts.length > 0 ? modelParts.join(':') : null,
+        provider,
+        model,
         inputTokens: usage.inputTokens ?? null,
         outputTokens: usage.outputTokens ?? null,
         latencyMs,
@@ -350,7 +353,10 @@ export class ChatService {
         await this.messagesRepository.updateContent(assistantMessage.id, buffer);
         return;
       }
-      const message = err instanceof Error ? err.message : 'Unknown error';
+      // Redact before it's streamed to the client and persisted (markError) —
+      // a provider/git error can echo a credential in its own message text,
+      // same hazard WorkerService.recordFailure already guards against.
+      const message = redactSecrets(err instanceof Error ? err.message : 'Unknown error');
       await this.messagesRepository.markError(assistantMessage.id, buffer, message);
       yield { type: 'error', data: { messageId: assistantMessage.id, message } };
     }
@@ -456,6 +462,7 @@ export class ChatService {
       const startedAt = Date.now();
       let lastFlushAt = startedAt;
       let usage: ChatUsage = {};
+      let servedBy: string | undefined;
 
       for await (const event of this.chatProvider.stream(
         { system: SYSTEM_PROMPT, user, maxTokens: GENERATION_MAX_TOKENS },
@@ -470,6 +477,8 @@ export class ChatService {
           }
         } else if (event.type === 'usage') {
           usage = { inputTokens: event.inputTokens, outputTokens: event.outputTokens };
+        } else if (event.type === 'done') {
+          servedBy = event.servedBy;
         }
       }
 
@@ -480,12 +489,12 @@ export class ChatService {
 
       const citations = parseCitations(buffer, evidence);
       const latencyMs = Date.now() - startedAt;
-      const [providerName, ...modelParts] = this.chatProvider.id.split(':');
+      const { provider, model } = this.splitProviderId(servedBy ?? this.chatProvider.id);
 
       await this.messagesRepository.completeAssistant(assistantMessage.id, {
         content: buffer,
-        provider: providerName ?? this.chatProvider.id,
-        model: modelParts.length > 0 ? modelParts.join(':') : null,
+        provider,
+        model,
         inputTokens: usage.inputTokens ?? null,
         outputTokens: usage.outputTokens ?? null,
         latencyMs,
@@ -524,6 +533,15 @@ export class ChatService {
           await this.conversationsRepository.setTitle(conversation.id, question.slice(0, TITLE_MAX_LENGTH));
         }
         await this.conversationsRepository.touch(conversation.id);
+      } catch {
+        // ignore — title/updatedAt bookkeeping is cosmetic, not correctness-critical
+      }
+      // The summary is NOT cosmetic — it's the rolling context a long
+      // conversation relies on once turns fall out of the recent window. A
+      // silent failure here degrades later answers with no trace (exactly the
+      // kind of thing `diagnose-answer` can't find), so log it. Still
+      // best-effort: the completed turn above must never flip back to 'error'.
+      try {
         await this.maybeUpdateSummary(
           conversation,
           priorExchanges,
@@ -536,15 +554,22 @@ export class ChatService {
           },
           signal,
         );
-      } catch {
-        // ignore — title/updatedAt/summary are cosmetic, not correctness-critical
+      } catch (err) {
+        this.logger.warn(
+          `Conversation summary update failed for ${conversation.id}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
       }
     } catch (err) {
       if (signal.aborted) {
         await this.messagesRepository.updateContent(assistantMessage.id, buffer);
         return;
       }
-      const message = err instanceof Error ? err.message : 'Unknown error';
+      // Redact before it's streamed to the client and persisted (markError) —
+      // a provider/git error can echo a credential in its own message text,
+      // same hazard WorkerService.recordFailure already guards against.
+      const message = redactSecrets(err instanceof Error ? err.message : 'Unknown error');
       await this.messagesRepository.markError(assistantMessage.id, buffer, message);
       yield { type: 'error', data: { messageId: assistantMessage.id, message } };
     }
@@ -644,6 +669,18 @@ export class ChatService {
       newSummary,
       lastEvicted.assistantMessageId,
     );
+  }
+
+  /**
+   * Splits a provider id ("gemini:gemini-flash-latest", or
+   * "groq:openai/gpt-oss-120b" whose model itself contains a colon) into the
+   * persisted provider/model pair. Fed the id of the provider that ACTUALLY
+   * served the turn (see `ChatCompletion.servedBy`), so a failed-over turn is
+   * recorded under Groq, not the configured-primary Gemini.
+   */
+  private splitProviderId(id: string): { provider: string; model: string | null } {
+    const [provider, ...modelParts] = id.split(':');
+    return { provider: provider ?? id, model: modelParts.length > 0 ? modelParts.join(':') : null };
   }
 
   private async requireConversation(id: string): Promise<ConversationRow> {

@@ -5,6 +5,7 @@ import {
   HttpStatus,
   Logger,
   Param,
+  ParseUUIDPipe,
   Post,
 } from '@nestjs/common';
 import { ApiAcceptedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
@@ -25,7 +26,7 @@ export class TourController {
 
   @Get()
   @ApiOkResponse({ type: TourStatusDto })
-  async get(@Param('id') id: string): Promise<TourStatusDto> {
+  async get(@Param('id', ParseUUIDPipe) id: string): Promise<TourStatusDto> {
     // Always 200 with a status envelope (Phase 13.5) — no 404 for "not yet",
     // so the client can tell 'generating' (keep polling) from 'absent' (stop).
     const { tour, status } = await this.tourService.getTourStatus(id);
@@ -35,7 +36,7 @@ export class TourController {
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiAcceptedResponse({ type: TourGenerateResponseDto })
-  async regenerate(@Param('id') id: string): Promise<TourGenerateResponseDto> {
+  async regenerate(@Param('id', ParseUUIDPipe) id: string): Promise<TourGenerateResponseDto> {
     // Fire-and-forget: a real tour takes 5-8 sequential model calls, too long
     // to hold an HTTP request open for — the client polls GET back until
     // `generatedAt` moves. Errors are caught and logged inside the service.

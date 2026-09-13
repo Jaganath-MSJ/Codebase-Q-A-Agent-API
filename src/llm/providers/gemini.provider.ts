@@ -89,6 +89,7 @@ export class GeminiChatProvider implements ChatProvider {
         inputTokens: response.usageMetadata?.promptTokenCount,
         outputTokens: response.usageMetadata?.candidatesTokenCount,
       },
+      servedBy: this.id,
     };
   }
 
@@ -147,6 +148,6 @@ export class GeminiChatProvider implements ChatProvider {
     }
 
     yield { type: 'usage', inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 };
-    yield { type: 'done', stopReason };
+    yield { type: 'done', stopReason, servedBy: this.id };
   }
 }

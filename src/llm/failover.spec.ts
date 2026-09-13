@@ -73,6 +73,17 @@ describe('FailoverChatProvider.complete', () => {
     expect(secondaryComplete).not.toHaveBeenCalled();
   });
 
+  it('reports servedBy as the secondary after a failover, not the primary', async () => {
+    const primary = provider({ id: 'gemini', complete: vi.fn().mockRejectedValue(status(429)) });
+    const secondary = provider({
+      id: 'groq',
+      complete: async () => ({ text: 'SECONDARY', usage: {}, servedBy: 'groq' }),
+    });
+    const res = await new FailoverChatProvider(primary, secondary).complete(REQ);
+    // `id` is still the primary's, but the turn was actually served by the secondary.
+    expect(res.servedBy).toBe('groq');
+  });
+
   it('does NOT fail over a tool request to a non-tool secondary', async () => {
     const secondaryComplete = vi.fn();
     const primary = provider({ supportsTools: true, complete: vi.fn().mockRejectedValue(status(429)) });
@@ -104,6 +115,26 @@ describe('FailoverChatProvider.stream', () => {
       { type: 'text', delta: 'SECONDARY' },
       { type: 'done', stopReason: 'stop' },
     ]);
+  });
+
+  it("passes the secondary's servedBy through on its done event after failover", async () => {
+    const primary = provider({
+      id: 'gemini',
+      // eslint-disable-next-line require-yield
+      stream: async function* () {
+        throw status(503);
+      },
+    });
+    const secondary = provider({
+      id: 'groq',
+      stream: async function* () {
+        yield { type: 'text', delta: 'SECONDARY' };
+        yield { type: 'done', stopReason: 'stop', servedBy: 'groq' };
+      },
+    });
+    const events = await collect(new FailoverChatProvider(primary, secondary).stream(REQ));
+    const done = events.find((e) => e.type === 'done');
+    expect(done).toEqual({ type: 'done', stopReason: 'stop', servedBy: 'groq' });
   });
 
   it('propagates and does NOT splice when the primary errors AFTER a text delta', async () => {

@@ -114,8 +114,15 @@ export class ChangeAnalysisService {
       evidence.push(block);
     };
 
+    // One query for every changed file's chunks instead of one per file — a
+    // commit can touch up to MAX_FILES files (see findByPaths).
+    const chunksByPath = await this.chunksRepository.findByPaths(
+      projectId,
+      changedFiles.map((f) => f.path),
+    );
+
     for (const file of changedFiles) {
-      const chunks = await this.chunksRepository.findByPath(projectId, file.path);
+      const chunks = chunksByPath.get(file.path) ?? [];
       for (const chunk of chunks) {
         addEvidence({ path: file.path, startLine: chunk.startLine, endLine: chunk.endLine, content: chunk.content });
       }

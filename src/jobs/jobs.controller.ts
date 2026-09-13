@@ -6,6 +6,7 @@ import {
   HttpStatus,
   NotFoundException,
   Param,
+  ParseUUIDPipe,
   Post,
 } from '@nestjs/common';
 import { ApiOkResponse, ApiAcceptedResponse, ApiTags } from '@nestjs/swagger';
@@ -44,7 +45,7 @@ export class JobsController {
 
   @Get('projects/:projectId/jobs/latest')
   @ApiOkResponse({ type: JobDto })
-  async latest(@Param('projectId') projectId: string): Promise<JobDto> {
+  async latest(@Param('projectId', ParseUUIDPipe) projectId: string): Promise<JobDto> {
     const job = await this.jobsService.findLatest(projectId);
     if (!job) throw new NotFoundException(`No indexing jobs for project ${projectId}`);
     return toJobDto(job);
@@ -53,7 +54,7 @@ export class JobsController {
   @Post('jobs/:jobId/cancel')
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiAcceptedResponse({ schema: { properties: { status: { enum: ['canceled', 'canceling'] } } } })
-  async cancel(@Param('jobId') jobId: string): Promise<{ status: 'canceled' | 'canceling' }> {
+  async cancel(@Param('jobId', ParseUUIDPipe) jobId: string): Promise<{ status: 'canceled' | 'canceling' }> {
     const result = await this.jobsService.cancel(jobId);
     if (!result) throw new ConflictException(`Job ${jobId} is not active`);
     return { status: result };

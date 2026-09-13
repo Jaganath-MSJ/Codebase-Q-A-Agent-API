@@ -1,4 +1,4 @@
-import { Controller, MessageEvent, Param, Sse } from '@nestjs/common';
+import { Controller, MessageEvent, Param, ParseUUIDPipe, Sse } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { from, interval, merge, Observable } from 'rxjs';
 import { auditTime, concatMap, filter, map } from 'rxjs/operators';
@@ -17,7 +17,7 @@ export class ProgressController {
   ) {}
 
   @Sse()
-  stream(@Param('projectId') projectId: string): Observable<MessageEvent> {
+  stream(@Param('projectId', ParseUUIDPipe) projectId: string): Observable<MessageEvent> {
     const snapshot$ = this.fetchEvent(projectId, 'snapshot');
 
     const live$ = this.eventBus.onAny().pipe(

@@ -36,6 +36,9 @@ export type AgentEvent =
       usage: ChatUsage;
       stopReason: AgentStopReason;
       evidence: EvidenceEntry[];
+      // The provider that served the final step (whichever the failover wrapper
+      // landed on) — so the persisted turn records who actually answered.
+      servedBy?: string;
     };
 
 function truncate(text: string, max: number): string {
@@ -67,6 +70,7 @@ export async function* runAgentLoop(
   let usage: ChatUsage = { inputTokens: 0, outputTokens: 0 };
   let totalTokens = 0;
   let finalText = '';
+  let servedBy: string | undefined;
 
   for (let step = 1; step <= MAX_STEPS; step++) {
     const pendingCalls: ToolCall[] = [];
@@ -93,22 +97,23 @@ export async function* runAgentLoop(
         totalTokens += event.inputTokens + event.outputTokens;
       } else if (event.type === 'done') {
         stopReason = event.stopReason;
+        servedBy = event.servedBy;
       }
     }
 
     finalText += stepText;
     if (signal.aborted) {
-      yield { type: 'done', text: finalText, trace, usage, stopReason: 'error', evidence };
+      yield { type: 'done', text: finalText, trace, usage, stopReason: 'error', evidence, servedBy };
       return;
     }
 
     if (stopReason !== 'tool_use' || pendingCalls.length === 0) {
-      yield { type: 'done', text: finalText, trace, usage, stopReason, evidence };
+      yield { type: 'done', text: finalText, trace, usage, stopReason, evidence, servedBy };
       return;
     }
 
     if (totalTokens >= MAX_TOTAL_TOKENS) {
-      yield { type: 'done', text: finalText, trace, usage, stopReason: 'budget_exhausted', evidence };
+      yield { type: 'done', text: finalText, trace, usage, stopReason: 'budget_exhausted', evidence, servedBy };
       return;
     }
 
@@ -134,5 +139,5 @@ export async function* runAgentLoop(
     priorTurns.push({ role: 'tool', results });
   }
 
-  yield { type: 'done', text: finalText, trace, usage, stopReason: 'budget_exhausted', evidence };
+  yield { type: 'done', text: finalText, trace, usage, stopReason: 'budget_exhausted', evidence, servedBy };
 }

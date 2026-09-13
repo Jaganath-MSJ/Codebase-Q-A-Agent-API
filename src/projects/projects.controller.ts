@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Query, Req, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post, Query, Req, Res } from '@nestjs/common';
 import { ApiOkResponse, ApiCreatedResponse, ApiAcceptedResponse, ApiNoContentResponse, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { ProjectsService } from './projects.service';
@@ -64,21 +64,21 @@ export class ProjectsController {
   @Post(':id/index')
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiAcceptedResponse({ type: JobDto })
-  async index(@Param('id') id: string, @Body() body: IndexRequestDto): Promise<JobDto> {
+  async index(@Param('id', ParseUUIDPipe) id: string, @Body() body: IndexRequestDto): Promise<JobDto> {
     const job = await this.jobsService.enqueue(id, body.force ? 'force' : 'initial');
     return toJobDto(job);
   }
 
   @Get(':id/cost-estimate')
   @ApiOkResponse({ type: CostEstimateDto })
-  async getCostEstimate(@Param('id') id: string): Promise<CostEstimateDto> {
+  async getCostEstimate(@Param('id', ParseUUIDPipe) id: string): Promise<CostEstimateDto> {
     return this.indexingService.estimateIndexCost(id);
   }
 
   @Get(':id/file')
   @ApiOkResponse({ type: FileViewDto })
   async getFile(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Query() query: FileQueryDto,
     @Req() req: Request,
     @Res() res: Response,
@@ -107,14 +107,14 @@ export class ProjectsController {
 
   @Get(':id/storage')
   @ApiOkResponse({ type: ProjectStorageDto })
-  async getStorage(@Param('id') id: string): Promise<ProjectStorageDto> {
+  async getStorage(@Param('id', ParseUUIDPipe) id: string): Promise<ProjectStorageDto> {
     return this.projectsService.getStorage(id);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNoContentResponse()
-  async remove(@Param('id') id: string): Promise<void> {
+  async remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     await this.indexingService.deleteProject(id);
   }
 }

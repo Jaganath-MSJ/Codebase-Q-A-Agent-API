@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS "indexing_jobs_project_id_created_idx" ON "indexing_jobs" USING btree ("project_id","created_at");

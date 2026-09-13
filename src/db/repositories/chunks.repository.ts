@@ -131,4 +131,34 @@ export class ChunksRepository {
       .where(and(eq(chunks.projectId, projectId), eq(files.path, path)))
       .orderBy(chunks.ord);
   }
+
+  /**
+   * `findByPath` for many paths in ONE query, grouped by path (each list in
+   * chunk order) — change-analysis diffs up to MAX_FILES changed files per
+   * commit and would otherwise issue one query per file.
+   */
+  async findByPaths(projectId: string, paths: string[]): Promise<Map<string, ChunkOfFile[]>> {
+    const byPath = new Map<string, ChunkOfFile[]>();
+    if (paths.length === 0) return byPath;
+
+    const rows = await this.db
+      .select({
+        path: files.path,
+        startLine: chunks.startLine,
+        endLine: chunks.endLine,
+        content: chunks.content,
+        symbol: chunks.symbol,
+      })
+      .from(chunks)
+      .innerJoin(files, eq(chunks.fileId, files.id))
+      .where(and(eq(chunks.projectId, projectId), inArray(files.path, paths)))
+      .orderBy(files.path, chunks.ord);
+
+    for (const { path, ...chunk } of rows) {
+      const existing = byPath.get(path);
+      if (existing) existing.push(chunk);
+      else byPath.set(path, [chunk]);
+    }
+    return byPath;
+  }
 }

@@ -5,6 +5,7 @@ import {
   HttpStatus,
   Logger,
   Param,
+  ParseUUIDPipe,
   Post,
 } from '@nestjs/common';
 import { ApiAcceptedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
@@ -36,7 +37,7 @@ export class ChangeAnalysisController {
 
   @Get()
   @ApiOkResponse({ type: ChangeAnalysisStatusDto })
-  async get(@Param('id') id: string): Promise<ChangeAnalysisStatusDto> {
+  async get(@Param('id', ParseUUIDPipe) id: string): Promise<ChangeAnalysisStatusDto> {
     // Always 200 with a status envelope (Phase 13.5) — no 404 for "not yet",
     // so the client can tell 'generating' (keep polling) from 'absent' (stop).
     const { analysis, status } = await this.changeAnalysisService.getAnalysisStatus(id);
@@ -46,7 +47,7 @@ export class ChangeAnalysisController {
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiAcceptedResponse({ type: ChangeAnalysisGenerateResponseDto })
-  async regenerate(@Param('id') id: string): Promise<ChangeAnalysisGenerateResponseDto> {
+  async regenerate(@Param('id', ParseUUIDPipe) id: string): Promise<ChangeAnalysisGenerateResponseDto> {
     // Fire-and-forget, same reasoning as TourController.regenerate — a real
     // analysis needs a git fetch plus retrieval plus a model call, too long
     // to hold the HTTP request open for. Errors are caught and logged inside the service.

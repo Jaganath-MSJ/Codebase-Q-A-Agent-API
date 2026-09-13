@@ -16,6 +16,10 @@ interface CachedStream {
   usage: ChatUsage;
   toolCalls: ToolCall[];
   stopReason: ChatStopReason;
+  // The provider that actually served the original stream — preserved so a
+  // cache replay reports the same provenance. Optional: entries written before
+  // this field existed replay with it undefined.
+  servedBy?: string;
 }
 
 export class CachingChatProvider implements ChatProvider {
@@ -60,7 +64,7 @@ export class CachingChatProvider implements ChatProvider {
         inputTokens: cached.usage.inputTokens ?? 0,
         outputTokens: cached.usage.outputTokens ?? 0,
       };
-      yield { type: 'done', stopReason: cached.stopReason };
+      yield { type: 'done', stopReason: cached.stopReason, servedBy: cached.servedBy };
       return;
     } catch {
       // cache miss
@@ -70,6 +74,7 @@ export class CachingChatProvider implements ChatProvider {
     let usage: ChatUsage = {};
     const toolCalls: ToolCall[] = [];
     let stopReason: ChatStopReason = 'stop';
+    let servedBy: string | undefined;
 
     for await (const event of this.inner.stream(req, signal)) {
       if (event.type === 'text') text += event.delta;
@@ -77,13 +82,16 @@ export class CachingChatProvider implements ChatProvider {
         toolCalls.push({ id: event.id, name: event.name, args: event.args, providerData: event.providerData });
       }
       if (event.type === 'usage') usage = { inputTokens: event.inputTokens, outputTokens: event.outputTokens };
-      if (event.type === 'done') stopReason = event.stopReason;
+      if (event.type === 'done') {
+        stopReason = event.stopReason;
+        servedBy = event.servedBy;
+      }
       yield event;
     }
 
     if (!signal?.aborted) {
       await mkdir(this.cacheDir, { recursive: true });
-      await writeFile(cachePath, JSON.stringify({ text, usage, toolCalls, stopReason } satisfies CachedStream));
+      await writeFile(cachePath, JSON.stringify({ text, usage, toolCalls, stopReason, servedBy } satisfies CachedStream));
     }
   }
 

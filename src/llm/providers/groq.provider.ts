@@ -46,6 +46,7 @@ export class GroqChatProvider implements ChatProvider {
         inputTokens: response.usage?.prompt_tokens,
         outputTokens: response.usage?.completion_tokens,
       },
+      servedBy: this.id,
     };
   }
 
@@ -82,6 +83,6 @@ export class GroqChatProvider implements ChatProvider {
     }
 
     yield { type: 'usage', inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 };
-    yield { type: 'done', stopReason };
+    yield { type: 'done', stopReason, servedBy: this.id };
   }
 }

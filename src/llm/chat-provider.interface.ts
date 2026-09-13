@@ -6,6 +6,15 @@ export interface ChatUsage {
 export interface ChatCompletion {
   text: string;
   usage: ChatUsage;
+  /**
+   * The `id` of the concrete provider that actually served this request. Set by
+   * the leaf providers and passed through unchanged by the failover/cache
+   * wrappers, so a request that failed over to the secondary is recorded under
+   * the provider that really produced it — not the wrapper's static `id` (which
+   * is always the primary's). Optional so older cache entries lacking it still
+   * parse.
+   */
+  servedBy?: string;
 }
 
 export interface ToolDefinition {
@@ -63,7 +72,10 @@ export type ChatEvent =
   | { type: 'text'; delta: string }
   | { type: 'tool_call'; id: string; name: string; args: Record<string, unknown>; providerData?: unknown }
   | { type: 'usage'; inputTokens: number; outputTokens: number }
-  | { type: 'done'; stopReason: ChatStopReason };
+  // `servedBy`: the concrete provider that produced this stream — see
+  // ChatCompletion.servedBy. Optional so a cached stream from before this
+  // field existed still replays.
+  | { type: 'done'; stopReason: ChatStopReason; servedBy?: string };
 
 export interface ChatProvider {
   readonly id: string;

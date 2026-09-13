@@ -6,6 +6,7 @@ import type { ProjectRow } from '../db/schema';
 import { JobsService } from './jobs.service';
 import { ASKPASS_TOKEN_ENV_VAR, ensureAskpassScript } from '../sources/git-askpass';
 import { remoteHeadSha, type GitEnv } from '../sources/git-clone';
+import { redactSecrets } from '../common/redact';
 
 // A network round trip to an external remote, not a local fs event — the
 // doc's "debounce hard, 30 seconds minimum" is about the local_path watcher's
@@ -67,8 +68,13 @@ export class GitPollService implements OnModuleInit, OnModuleDestroy {
       try {
         await this.checkOne(project);
       } catch (err) {
+        // A `git ls-remote` against a private repo runs with the PAT in its
+        // env; a rejected credential can surface in the subprocess's own error
+        // text, so redact before logging — same hazard WorkerService guards.
         this.logger.warn(
-          `Remote-head check failed for project ${project.id}: ${err instanceof Error ? err.message : String(err)}`,
+          `Remote-head check failed for project ${project.id}: ${redactSecrets(
+            err instanceof Error ? err.message : String(err),
+          )}`,
         );
       }
     }

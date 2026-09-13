@@ -162,6 +162,13 @@
       "when": 1788876181848,
       "tag": "0022_vector_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1789288910348,
+      "tag": "0023_indexing_jobs_project_created_idx",
+      "breakpoints": true
     }
   ]
 }

@@ -217,6 +217,11 @@ export const indexingJobs = pgTable(
       sql`${table.phase} IN ('acquiring','walking','chunking','embedding','finalizing')`,
     ),
     index('indexing_jobs_status_created_idx').on(table.status, table.createdAt),
+    // findLatestByProject / findLatestByProjectIds sort each project's jobs by
+    // recency with no status filter, so neither the (status, created_at) index
+    // nor the partial one_active_job_per_project index below can serve them —
+    // both fell back to a full scan on every SSE poll tick and dashboard load.
+    index('indexing_jobs_project_id_created_idx').on(table.projectId, table.createdAt),
     uniqueIndex('one_active_job_per_project')
       .on(table.projectId)
       .where(sql`${table.status} IN ('queued','running','paused')`),

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { ChatService, type ChatSseEvent, type MessageWithCitations } from './chat.service';
@@ -73,7 +73,7 @@ export class ChatController {
   @Post('projects/:projectId/conversations')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreatedResponse({ type: ConversationDto })
-  async createConversation(@Param('projectId') projectId: string): Promise<ConversationDto> {
+  async createConversation(@Param('projectId', ParseUUIDPipe) projectId: string): Promise<ConversationDto> {
     const row = await this.chatService.createConversation(projectId);
     return toConversationDto(row);
   }
@@ -89,7 +89,7 @@ export class ChatController {
 
   @Get('projects/:projectId/conversations')
   @ApiOkResponse({ type: ConversationDto, isArray: true })
-  async listConversations(@Param('projectId') projectId: string): Promise<ConversationDto[]> {
+  async listConversations(@Param('projectId', ParseUUIDPipe) projectId: string): Promise<ConversationDto[]> {
     const rows = await this.chatService.listConversations(projectId);
     const projectIdsByConversation = await this.conversationProjectsRepository.findProjectIdsForConversations(
       rows.map((r) => r.id),
@@ -99,7 +99,7 @@ export class ChatController {
 
   @Get('conversations/:id/messages')
   @ApiOkResponse({ type: MessageDto, isArray: true })
-  async listMessages(@Param('id') id: string): Promise<MessageDto[]> {
+  async listMessages(@Param('id', ParseUUIDPipe) id: string): Promise<MessageDto[]> {
     const rows = await this.chatService.listMessages(id);
     return rows.map(toMessageDto);
   }
@@ -111,7 +111,7 @@ export class ChatController {
    */
   @Get('conversations/:id/export')
   @ApiOkResponse({ description: 'text/markdown attachment of the full conversation transcript' })
-  async exportConversation(@Param('id') id: string, @Res() res: Response): Promise<void> {
+  async exportConversation(@Param('id', ParseUUIDPipe) id: string, @Res() res: Response): Promise<void> {
     const { title, markdown } = await this.chatService.exportConversationMarkdown(id);
     const filename = `conversation-${slugify(title) ?? id}.md`;
 
@@ -140,7 +140,7 @@ export class ChatController {
     description: 'text/event-stream: message_created, status, sources, token, done, error',
   })
   async postMessage(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: PostMessageDto,
     @Res() res: Response,
   ): Promise<void> {
