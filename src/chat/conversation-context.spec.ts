@@ -97,4 +97,24 @@ describe('evictedExchanges', () => {
   it('returns nothing when the window covers the whole conversation', () => {
     expect(evictedExchanges(exchanges, 10, null)).toEqual([]);
   });
+
+  it('evicts the whole older slice when the watermark is not in the (bounded) tail', () => {
+    // computePriorExchanges now loads only messages AFTER the summary watermark,
+    // so the watermark's own exchange is absent from the list. evictedExchanges
+    // must then treat everything older than the window as newly-evicted (the
+    // `idx === -1` branch) — this is what keeps summarization advancing correctly
+    // once the per-turn fetch is bounded to the un-summarized tail.
+    const tail = toExchanges([
+      message('u5', 'user', 'q5'),
+      message('a5', 'assistant', 'a5'),
+      message('u6', 'user', 'q6'),
+      message('a6', 'assistant', 'a6'),
+      message('u7', 'user', 'q7'),
+      message('a7', 'assistant', 'a7'),
+      message('u8', 'user', 'q8'),
+      message('a8', 'assistant', 'a8'),
+    ]);
+    // window=3 keeps q6,q7,q8; the watermark 'a4' predates this tail and isn't in it.
+    expect(evictedExchanges(tail, 3, 'a4').map((e) => e.question)).toEqual(['q5']);
+  });
 });

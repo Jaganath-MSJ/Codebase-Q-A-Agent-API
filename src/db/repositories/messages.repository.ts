@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq, gt } from 'drizzle-orm';
 import type { Db } from '../pool';
 import { DB_TOKEN } from '../tokens';
 import { messages, MessageRow } from '../schema';
@@ -86,5 +86,28 @@ export class MessagesRepository {
       .from(messages)
       .where(eq(messages.conversationId, conversationId))
       .orderBy(asc(messages.createdAt));
+  }
+
+  /**
+   * Messages after the summary watermark (an assistant message id whose turn is
+   * already folded into `conversations.summary`), in conversation order, plus
+   * the current turn. Lets `computePriorExchanges` load only the un-summarized
+   * tail instead of the full, ever-growing transcript. Every row carries a
+   * distinct `created_at` (createTurn offsets the assistant by 1ms), so a strict
+   * `> watermark.created_at` cleanly starts at the next turn's user row. Falls
+   * back to the whole history if the watermark row is missing (shouldn't happen —
+   * it's an assistant id this service wrote).
+   */
+  async findAfterMessage(conversationId: string, afterMessageId: string): Promise<MessageRow[]> {
+    const [watermark] = await this.db
+      .select({ createdAt: messages.createdAt })
+      .from(messages)
+      .where(eq(messages.id, afterMessageId));
+    if (!watermark) return this.findAllByConversation(conversationId);
+    return this.db
+      .select()
+      .from(messages)
+      .where(and(eq(messages.conversationId, conversationId), gt(messages.createdAt, watermark.createdAt)))
+      .orderBy(asc(messages.createdAt), asc(messages.id));
   }
 }

@@ -168,6 +168,9 @@ export const chunks = pgTable(
     // cosine distance on halfvec(768). Opclass MUST be halfvec_cosine_ops to match
     // the column type and the `<=>`/cosineDistance operator in vector.retriever.ts;
     // the partial predicate mirrors that retriever's `isNotNull(embedding)` filter.
+    // NOTE: this index is not scoped by project_id (all projects share the table).
+    // vector.retriever.ts sets `hnsw.iterative_scan` so the per-project WHERE
+    // filter keeps its top-K recall once the planner actually uses this index.
     index('chunks_embedding_hnsw')
       .using('hnsw', table.embedding.op('halfvec_cosine_ops'))
       .with({ m: 16, ef_construction: 64 })

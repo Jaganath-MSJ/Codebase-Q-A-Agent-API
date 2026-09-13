@@ -209,7 +209,7 @@ export class ChatService {
       data: { userMessageId: userMessage.id, assistantMessageId: assistantMessage.id },
     };
 
-    const priorExchanges = await this.computePriorExchanges(conversationId);
+    const priorExchanges = await this.computePriorExchanges(conversationId, conversation.summarizedThroughMsgId);
     yield* this.generateRagAnswer(conversation, userMessage, assistantMessage, question, priorExchanges, signal);
   }
 
@@ -291,7 +291,7 @@ export class ChatService {
         // exhausted trajectory's own partial text is discarded in favor of a
         // complete RAG answer on the same row — but its `tool_trace` is worth
         // keeping, so `generateRagAnswer` is told about it explicitly.
-        const priorExchanges = await this.computePriorExchanges(conversationId);
+        const priorExchanges = await this.computePriorExchanges(conversationId, conversation.summarizedThroughMsgId);
         yield* this.generateRagAnswer(
           conversation,
           userMessage,
@@ -628,8 +628,19 @@ export class ChatService {
    * everything before them is prior turns to condense/summarize against.
    * Only a successfully completed turn is trustworthy context.
    */
-  private async computePriorExchanges(conversationId: string): Promise<Exchange[]> {
-    const allMessages = await this.messagesRepository.findAllByConversation(conversationId);
+  private async computePriorExchanges(
+    conversationId: string,
+    summarizedThroughMsgId: string | null,
+  ): Promise<Exchange[]> {
+    // Bound the per-turn fetch: once a summary watermark exists, everything
+    // before it is already folded into `conversations.summary`, so load only the
+    // un-summarized tail — which still covers the recent windows and the eviction
+    // set below (eviction always leaves GENERATION_WINDOW complete exchanges
+    // after the watermark) — instead of the full, ever-growing transcript.
+    // Before the first summary the whole (still short) history is loaded, as before.
+    const allMessages = summarizedThroughMsgId
+      ? await this.messagesRepository.findAfterMessage(conversationId, summarizedThroughMsgId)
+      : await this.messagesRepository.findAllByConversation(conversationId);
     return toExchanges(allMessages.slice(0, -2)).filter((ex) => ex.answerStatus === 'complete');
   }
 
@@ -646,7 +657,11 @@ export class ChatService {
     signal: AbortSignal,
   ): Promise<void> {
     const allExchanges = [...priorExchanges, currentExchange];
-    if (allExchanges.length <= SUMMARY_TRIGGER_EXCHANGES) return;
+    // The raw-count trigger only applies before the first summary. Once a
+    // watermark exists, `priorExchanges` is just the un-summarized tail (not the
+    // full history — see computePriorExchanges), so this count would wrongly stop
+    // summarizing; skip the gate then and let eviction fold the tail forward.
+    if (!conversation.summarizedThroughMsgId && allExchanges.length <= SUMMARY_TRIGGER_EXCHANGES) return;
 
     const evicted = evictedExchanges(
       allExchanges,
