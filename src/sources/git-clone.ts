@@ -159,7 +159,7 @@ export async function currentRevision(dest: string): Promise<string> {
   return (await simpleGit(dest).revparse(['HEAD'])).trim();
 }
 
-export interface ChangedFile {
+interface ChangedFile {
   path: string;
   insertions: number;
   deletions: number;
@@ -167,7 +167,7 @@ export interface ChangedFile {
   patch: string;
 }
 
-export interface LastCommitInfo {
+interface LastCommitInfo {
   hash: string;
   message: string;
   authorName: string;

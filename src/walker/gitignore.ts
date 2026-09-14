@@ -9,7 +9,7 @@ interface IgnoreLevel {
   ig: Ignore;
 }
 
-export interface GitignoreFilter {
+interface GitignoreFilter {
   isIgnored(relPath: string): boolean;
 }
 

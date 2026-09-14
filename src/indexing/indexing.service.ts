@@ -55,7 +55,7 @@ export interface IndexProgress {
 }
 
 export type OnIndexProgress = (update: IndexProgress) => Promise<void> | void;
-export type ShouldCancel = () => Promise<boolean>;
+type ShouldCancel = () => Promise<boolean>;
 
 // Matches the unique `one_active_job_per_project` index's WHERE clause.
 const ACTIVE_JOB_STATUSES = new Set(['queued', 'running', 'paused']);

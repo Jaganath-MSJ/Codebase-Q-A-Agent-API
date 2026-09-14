@@ -4,7 +4,7 @@ import type { Db } from '../pool';
 import { DB_TOKEN } from '../tokens';
 import { indexingJobs, IndexingJobRow, NewIndexingJobRow } from '../schema';
 
-export type ProgressUpdate = Partial<
+type ProgressUpdate = Partial<
   Pick<
     NewIndexingJobRow,
     | 'phase'

@@ -4,7 +4,7 @@ import type { Db } from '../pool';
 import { DB_TOKEN } from '../tokens';
 import { chunks, files, FileRow, NewChunkRow, NewFileRow } from '../schema';
 
-export interface ExistingFile {
+interface ExistingFile {
   id: string;
   path: string;
   contentHash: string;

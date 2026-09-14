@@ -1,4 +1,4 @@
-export interface EmbeddingContext {
+interface EmbeddingContext {
   path: string;
   symbol: string | null;
   startLine: number;

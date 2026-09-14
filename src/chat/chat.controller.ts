@@ -27,7 +27,7 @@ import {
 } from '../contracts';
 import type { ConversationRow, CitationRow } from '../db/schema';
 
-export function toConversationDto(
+function toConversationDto(
   row: ConversationRow,
   projectIds?: string[],
 ): ConversationDto {
@@ -66,7 +66,7 @@ function toCitationDto(row: CitationRow): CitationDto {
   };
 }
 
-export function toMessageDto(row: MessageWithCitations): MessageDto {
+function toMessageDto(row: MessageWithCitations): MessageDto {
   return {
     id: row.id,
     conversationId: row.conversationId,

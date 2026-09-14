@@ -4,7 +4,7 @@ import type { Db } from '../pool';
 import { DB_TOKEN } from '../tokens';
 import { messages, MessageRow } from '../schema';
 
-export interface CompleteAssistantData {
+interface CompleteAssistantData {
   content: string;
   provider: string;
   model: string | null;

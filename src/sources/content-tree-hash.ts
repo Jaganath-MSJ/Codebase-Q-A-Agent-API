@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import fg from 'fast-glob';
 import { toPosix } from '../common/paths';
 
-export interface ContentTreeEntry {
+interface ContentTreeEntry {
   path: string;
   contentHash: string;
 }

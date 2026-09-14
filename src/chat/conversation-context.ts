@@ -1,4 +1,4 @@
-export interface MessageLike {
+interface MessageLike {
   id: string;
   role: string;
   content: string;

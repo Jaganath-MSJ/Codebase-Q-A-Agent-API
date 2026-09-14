@@ -10,12 +10,12 @@ export interface EvidenceBlock {
   projectId?: string;
 }
 
-export interface RecentExchange {
+interface RecentExchange {
   question: string;
   answer: string;
 }
 
-export interface ConversationContext {
+interface ConversationContext {
   overview?: string | null;
   summary?: string | null;
   recentExchanges: RecentExchange[];
@@ -82,7 +82,7 @@ const CONDENSATION_SYSTEM_PROMPT = [
   'Output only the rewritten question and nothing else — no preamble, no quotes.',
 ].join(' ');
 
-export interface CondensationPrompt {
+interface CondensationPrompt {
   system: string;
   user: string;
 }
@@ -104,7 +104,7 @@ const SUMMARY_SYSTEM_PROMPT = [
   'Output only the updated summary paragraph, nothing else.',
 ].join(' ');
 
-export interface SummaryPrompt {
+interface SummaryPrompt {
   system: string;
   user: string;
 }

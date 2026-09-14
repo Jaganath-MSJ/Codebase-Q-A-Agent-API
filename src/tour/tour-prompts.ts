@@ -36,7 +36,7 @@ const REDUCE_SYSTEM_PROMPT = [
   'the summaries below — never invent a new number or write a path yourself.',
 ].join(' ');
 
-export interface PromptPair {
+interface PromptPair {
   system: string;
   user: string;
 }
@@ -63,7 +63,7 @@ export function buildTourReducePrompt(groupSummaries: string[]): PromptPair {
   };
 }
 
-export interface ParsedTourSection {
+interface ParsedTourSection {
   title: string;
   body: string;
 }

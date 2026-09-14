@@ -12,7 +12,7 @@ export interface ChangedFileDiff {
   patch: string;
 }
 
-export interface PromptPair {
+interface PromptPair {
   system: string;
   user: string;
 }

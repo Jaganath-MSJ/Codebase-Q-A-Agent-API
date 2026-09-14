@@ -4,7 +4,7 @@ const ALGORITHM = 'aes-256-gcm';
 const IV_BYTES = 12; // 96-bit, the GCM-recommended IV length
 const KEY_BYTES = 32; // 256-bit
 
-export interface EncryptedPayload {
+interface EncryptedPayload {
   ciphertext: Buffer;
   iv: Buffer;
   authTag: Buffer;

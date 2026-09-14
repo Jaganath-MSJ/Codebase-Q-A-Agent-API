@@ -28,14 +28,14 @@ const AGENT_MAX_TOKENS = 2048;
 // thousands of tokens and blow the context in one call.
 const TOOL_RESULT_TRUNCATE_CHARS = 4000;
 
-export interface AgentTraceEntry {
+interface AgentTraceEntry {
   tool: string;
   args: Record<string, unknown>;
   resultSummary: string;
   ms: number;
 }
 
-export type AgentStopReason = ChatStopReason | 'budget_exhausted';
+type AgentStopReason = ChatStopReason | 'budget_exhausted';
 
 export type AgentEvent =
   | { type: 'text'; delta: string }

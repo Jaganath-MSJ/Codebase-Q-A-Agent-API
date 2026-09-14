@@ -8,7 +8,7 @@ import {
 
 export type GrammarLang = 'typescript' | 'tsx' | 'javascript' | 'python';
 
-export const EXTENSION_TO_GRAMMAR: Record<string, GrammarLang> = {
+const EXTENSION_TO_GRAMMAR: Record<string, GrammarLang> = {
   ts: 'typescript',
   mts: 'typescript',
   cts: 'typescript',

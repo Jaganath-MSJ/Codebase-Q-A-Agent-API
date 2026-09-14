@@ -1,4 +1,4 @@
-export type ChatMode = 'fast' | 'thorough';
+type ChatMode = 'fast' | 'thorough';
 
 // Keyword heuristics from docs/phases/phase-7-agentic-search.md §5 — get most
 // of the value for nearly no cost. Deliberately loose (e.g. "what...break"

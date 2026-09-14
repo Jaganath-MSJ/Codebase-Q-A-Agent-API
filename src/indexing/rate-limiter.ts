@@ -3,7 +3,7 @@ import { JobsRepository } from '../db/repositories/jobs.repository';
 import { EMBEDDING_PROVIDER_TOKEN } from '../embeddings/embeddings.module';
 import type { EmbeddingProvider } from '../embeddings/embedding-provider.interface';
 
-export interface RateLimitConfig {
+interface RateLimitConfig {
   requestsPerMinute: number;
   requestsPerDay: number;
 }

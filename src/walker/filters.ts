@@ -57,7 +57,7 @@ const FILENAME_DENYLIST_PATTERNS = [
 ];
 
 export const MAX_FILE_BYTES = 256 * 1024;
-export const MAX_LINE_LENGTH = 2000;
+const MAX_LINE_LENGTH = 2000;
 
 export function isDenylisted(relPath: string): boolean {
   return DENYLIST_PREFIXES.some((prefix) => relPath.startsWith(prefix));

@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 
-export interface ReadResult {
+interface ReadResult {
   text: string;
   lines: string[];
 }

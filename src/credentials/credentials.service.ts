@@ -3,7 +3,7 @@ import { CredentialsRepository } from '../db/repositories/credentials.repository
 import { ConfigService } from '../config/config.service';
 import { decodeCredentialKey, decrypt, encrypt } from './crypto.util';
 
-export interface CredentialMeta {
+interface CredentialMeta {
   kind: string;
   createdAt: Date;
 }

@@ -4,7 +4,7 @@ import type { Db } from '../pool';
 import { DB_TOKEN } from '../tokens';
 import { chunks, files, ChunkRow, NewChunkRow } from '../schema';
 
-export interface PendingEmbeddingChunk {
+interface PendingEmbeddingChunk {
   id: string;
   content: string;
   symbol: string | null;
@@ -13,14 +13,14 @@ export interface PendingEmbeddingChunk {
   endLine: number;
 }
 
-export interface FirstChunkOfFile {
+interface FirstChunkOfFile {
   path: string;
   startLine: number;
   endLine: number;
   content: string;
 }
 
-export interface ChunkOfFile {
+interface ChunkOfFile {
   startLine: number;
   endLine: number;
   content: string;

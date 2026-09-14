@@ -8,7 +8,7 @@ import { assertSafeZipEntryPath, ZipSlipError } from './zip-path-guard';
 export class ZipBombError extends Error {}
 export class ZipSymlinkError extends Error {}
 
-export interface ExtractLimits {
+interface ExtractLimits {
   maxEntries: number;
   maxEntryBytes: number;
   maxTotalBytes: number;
@@ -17,7 +17,7 @@ export interface ExtractLimits {
 // "100 MB is generous" for the upload itself (per the phase doc); these guard
 // what that upload is allowed to expand into once decompressed, which a
 // compression ratio can inflate by orders of magnitude.
-export const DEFAULT_EXTRACT_LIMITS: ExtractLimits = {
+const DEFAULT_EXTRACT_LIMITS: ExtractLimits = {
   maxEntries: 20_000,
   maxEntryBytes: 200 * 1024 * 1024,
   maxTotalBytes: 1024 * 1024 * 1024,

@@ -16,7 +16,7 @@ import {
 } from './filters';
 import { loadGitignoreFilter } from './gitignore';
 
-export interface WalkedFile {
+interface WalkedFile {
   relPath: string;
   absPath: string;
   // Read once here (Phase 12.6) so the indexer doesn't re-read from disk. The
@@ -27,10 +27,10 @@ export interface WalkedFile {
   lines: string[];
 }
 
-export type SkipReason =
+type SkipReason =
   'gitignore' | 'filename' | 'extension' | 'too-large' | 'binary' | 'minified';
 
-export interface WalkResult {
+interface WalkResult {
   included: WalkedFile[];
   skipReasons: Partial<Record<SkipReason, number>>;
 }

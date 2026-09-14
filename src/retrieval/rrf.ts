@@ -5,7 +5,7 @@ export interface RankedList {
   weight?: number;
 }
 
-export interface FusedResult {
+interface FusedResult {
   id: string;
   score: number;
 }

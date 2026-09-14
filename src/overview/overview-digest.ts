@@ -59,7 +59,7 @@ export interface OverviewFileEntry {
   lang: string | null;
 }
 
-export interface RepoOverviewFacts {
+interface RepoOverviewFacts {
   name: string;
   totalFiles: number;
   topLanguage: string | null;

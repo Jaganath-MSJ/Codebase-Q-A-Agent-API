@@ -4,13 +4,13 @@ import type { Db } from '../pool';
 import { DB_TOKEN } from '../tokens';
 import { chunks } from '../schema';
 
-export interface ProjectStorageBytes {
+interface ProjectStorageBytes {
   chunkCount: number;
   contentBytes: number;
   vectorBytes: number;
 }
 
-export interface DatabaseStorageTotals {
+interface DatabaseStorageTotals {
   databaseBytes: number;
   chunksIndexBytes: number;
 }
