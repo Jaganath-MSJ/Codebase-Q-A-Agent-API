@@ -9,7 +9,13 @@ import { ProgressReporter } from './progress.reporter';
 import { EmbeddingRateLimiter } from './rate-limiter';
 
 @Module({
-  imports: [WalkerModule, ChunkingModule, EmbeddingsModule, SourcesModule, OverviewModule],
+  imports: [
+    WalkerModule,
+    ChunkingModule,
+    EmbeddingsModule,
+    SourcesModule,
+    OverviewModule,
+  ],
   providers: [IndexingService, ProgressReporter, EmbeddingRateLimiter],
   exports: [IndexingService, ProgressReporter],
 })

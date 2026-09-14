@@ -11,5 +11,8 @@ const TOKEN_PATTERNS = [
 ];
 
 export function redactSecrets(text: string): string {
-  return TOKEN_PATTERNS.reduce((redacted, pattern) => redacted.replace(pattern, '[REDACTED]'), text);
+  return TOKEN_PATTERNS.reduce(
+    (redacted, pattern) => redacted.replace(pattern, '[REDACTED]'),
+    text,
+  );
 }

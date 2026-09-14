@@ -11,9 +11,13 @@ export class EventBusService {
     this.subject.next(event);
   }
 
-  on<T extends AppEvent['type']>(type: T): Observable<Extract<AppEvent, { type: T }>> {
+  on<T extends AppEvent['type']>(
+    type: T,
+  ): Observable<Extract<AppEvent, { type: T }>> {
     return this.subject.pipe(
-      filter((event): event is Extract<AppEvent, { type: T }> => event.type === type),
+      filter(
+        (event): event is Extract<AppEvent, { type: T }> => event.type === type,
+      ),
     );
   }
 

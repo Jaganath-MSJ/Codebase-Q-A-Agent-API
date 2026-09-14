@@ -13,14 +13,20 @@ export const EMBEDDING_PROVIDER_TOKEN = Symbol('EMBEDDING_PROVIDER');
     {
       provide: EMBEDDING_PROVIDER_TOKEN,
       inject: [ConfigService, LocalEmbeddingProvider],
-      useFactory: (config: ConfigService, local: LocalEmbeddingProvider): EmbeddingProvider => {
+      useFactory: (
+        config: ConfigService,
+        local: LocalEmbeddingProvider,
+      ): EmbeddingProvider => {
         if (config.embeddingProvider !== 'local') {
           throw new Error(
             `Embedding provider '${config.embeddingProvider}' is not implemented yet — ` +
               `Phase 1 only supports 'local'.`,
           );
         }
-        return new CachingEmbeddingProvider(local, path.join(config.dataDir, 'cache', 'embeddings'));
+        return new CachingEmbeddingProvider(
+          local,
+          path.join(config.dataDir, 'cache', 'embeddings'),
+        );
       },
     },
   ],

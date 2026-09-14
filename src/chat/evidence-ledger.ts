@@ -11,8 +11,14 @@ export interface EvidenceEntry extends EvidenceRef {
  * trajectory (not reset per tool call) — matching how `parseCitations`
  * resolves `[n]` positionally against the final evidence array.
  */
-export function recordEvidence(existing: EvidenceEntry[], regions: EvidenceRef[]): EvidenceEntry[] {
-  return regions.map((region, i) => ({ ...region, marker: existing.length + i + 1 }));
+export function recordEvidence(
+  existing: EvidenceEntry[],
+  regions: EvidenceRef[],
+): EvidenceEntry[] {
+  return regions.map((region, i) => ({
+    ...region,
+    marker: existing.length + i + 1,
+  }));
 }
 
 /** Renders one evidence entry as the model-facing block from docs/phases/phase-7-agentic-search.md §4. */

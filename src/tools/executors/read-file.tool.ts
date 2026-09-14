@@ -12,12 +12,20 @@ const DEFAULT_WINDOW_LINES = 300;
 
 export const READ_FILE_TOOL: ToolDefinition = {
   name: 'read_file',
-  description: 'Read a file, optionally a line range. Prefer a range once you know roughly where to look.',
+  description:
+    'Read a file, optionally a line range. Prefer a range once you know roughly where to look.',
   parameters: {
     type: 'object',
     properties: {
-      path: { type: 'string', description: 'Repo-relative file path, e.g. src/auth/auth.service.ts' },
-      startLine: { type: 'number', description: '1-based start line (inclusive). Omit to read from the top.' },
+      path: {
+        type: 'string',
+        description: 'Repo-relative file path, e.g. src/auth/auth.service.ts',
+      },
+      startLine: {
+        type: 'number',
+        description:
+          '1-based start line (inclusive). Omit to read from the top.',
+      },
       endLine: {
         type: 'number',
         description: `1-based end line (inclusive). Omit to read up to ${DEFAULT_WINDOW_LINES} lines from startLine.`,
@@ -34,17 +42,25 @@ export async function readFileTool(
   args: Record<string, unknown>,
 ): Promise<ToolExecutionResult> {
   const relPath = typeof args.path === 'string' ? args.path.trim() : '';
-  if (!relPath) return { regions: [], note: 'Error: read_file requires a non-empty "path" string argument.' };
+  if (!relPath)
+    return {
+      regions: [],
+      note: 'Error: read_file requires a non-empty "path" string argument.',
+    };
 
   const project = await projectsRepository.findById(projectId);
-  if (!project) return { regions: [], note: `Error: project ${projectId} not found.` };
+  if (!project)
+    return { regions: [], note: `Error: project ${projectId} not found.` };
 
   const root = project.workspacePath ?? project.sourceRef;
   let absPath: string;
   try {
     absPath = resolveInside(root, relPath);
   } catch {
-    return { regions: [], note: `Error: path escapes the project workspace: ${relPath}` };
+    return {
+      regions: [],
+      note: `Error: path escapes the project workspace: ${relPath}`,
+    };
   }
 
   let lines: string[];
@@ -57,14 +73,31 @@ export async function readFileTool(
     throw err;
   }
 
-  const start = Math.max(1, typeof args.startLine === 'number' ? Math.floor(args.startLine) : 1);
+  const start = Math.max(
+    1,
+    typeof args.startLine === 'number' ? Math.floor(args.startLine) : 1,
+  );
   if (start > lines.length) {
-    return { regions: [], note: `Error: startLine ${start} is past the end of the file (${lines.length} lines).` };
+    return {
+      regions: [],
+      note: `Error: startLine ${start} is past the end of the file (${lines.length} lines).`,
+    };
   }
 
   const requestedEnd =
-    typeof args.endLine === 'number' ? Math.floor(args.endLine) : start + DEFAULT_WINDOW_LINES - 1;
+    typeof args.endLine === 'number'
+      ? Math.floor(args.endLine)
+      : start + DEFAULT_WINDOW_LINES - 1;
   const end = Math.min(lines.length, requestedEnd);
 
-  return { regions: [{ path: relPath, startLine: start, endLine: end, content: lines.slice(start - 1, end).join('\n') }] };
+  return {
+    regions: [
+      {
+        path: relPath,
+        startLine: start,
+        endLine: end,
+        content: lines.slice(start - 1, end).join('\n'),
+      },
+    ],
+  };
 }

@@ -44,7 +44,10 @@ export class StorageRepository {
    * not divided up.
    */
   async getDatabaseTotals(): Promise<DatabaseStorageTotals> {
-    const result = await this.db.execute<{ database_bytes: string; chunks_index_bytes: string }>(sql`
+    const result = await this.db.execute<{
+      database_bytes: string;
+      chunks_index_bytes: string;
+    }>(sql`
       select
         pg_database_size(current_database()) as database_bytes,
         pg_indexes_size('chunks') as chunks_index_bytes

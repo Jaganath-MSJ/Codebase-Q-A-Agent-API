@@ -26,12 +26,17 @@ export class JobsRepository {
   constructor(@Inject(DB_TOKEN) private readonly db: Db) {}
 
   async enqueue(projectId: string, trigger: string): Promise<IndexingJobRow> {
-    const [row] = await this.db.insert(indexingJobs).values({ projectId, trigger }).returning();
+    const [row] = await this.db
+      .insert(indexingJobs)
+      .values({ projectId, trigger })
+      .returning();
     if (!row) throw new Error('Insert returned no row');
     return row;
   }
 
-  async findLatestByProject(projectId: string): Promise<IndexingJobRow | undefined> {
+  async findLatestByProject(
+    projectId: string,
+  ): Promise<IndexingJobRow | undefined> {
     const [row] = await this.db
       .select()
       .from(indexingJobs)
@@ -47,7 +52,9 @@ export class JobsRepository {
    * DESC`, i.e. the most recent. Lets the projects list embed each row's latest
    * job so the dashboard doesn't fetch one per project.
    */
-  async findLatestByProjectIds(projectIds: string[]): Promise<IndexingJobRow[]> {
+  async findLatestByProjectIds(
+    projectIds: string[],
+  ): Promise<IndexingJobRow[]> {
     if (projectIds.length === 0) return [];
     return this.db
       .selectDistinctOn([indexingJobs.projectId])
@@ -57,7 +64,10 @@ export class JobsRepository {
   }
 
   async findById(id: string): Promise<IndexingJobRow | undefined> {
-    const [row] = await this.db.select().from(indexingJobs).where(eq(indexingJobs.id, id));
+    const [row] = await this.db
+      .select()
+      .from(indexingJobs)
+      .where(eq(indexingJobs.id, id));
     return row;
   }
 
@@ -92,13 +102,20 @@ export class JobsRepository {
   async claimNext(): Promise<IndexingJobRow | undefined> {
     return this.db.transaction(async (tx) => {
       const [candidate] = await tx
-        .select({ id: indexingJobs.id, status: indexingJobs.status, attempt: indexingJobs.attempt })
+        .select({
+          id: indexingJobs.id,
+          status: indexingJobs.status,
+          attempt: indexingJobs.attempt,
+        })
         .from(indexingJobs)
         .where(
           or(
             eq(indexingJobs.status, 'queued'),
             eq(indexingJobs.status, 'paused'),
-            and(eq(indexingJobs.status, 'running'), lt(indexingJobs.leaseExpiresAt, new Date())),
+            and(
+              eq(indexingJobs.status, 'running'),
+              lt(indexingJobs.leaseExpiresAt, new Date()),
+            ),
           ),
         )
         .orderBy(indexingJobs.createdAt)
@@ -180,7 +197,15 @@ export class JobsRepository {
     const [queuedRow] = await this.db
       .update(indexingJobs)
       .set({ status: 'canceled', finishedAt: new Date() })
-      .where(and(eq(indexingJobs.id, id), or(eq(indexingJobs.status, 'queued'), eq(indexingJobs.status, 'paused'))))
+      .where(
+        and(
+          eq(indexingJobs.id, id),
+          or(
+            eq(indexingJobs.status, 'queued'),
+            eq(indexingJobs.status, 'paused'),
+          ),
+        ),
+      )
       .returning({ id: indexingJobs.id });
     if (queuedRow) return 'canceled';
 

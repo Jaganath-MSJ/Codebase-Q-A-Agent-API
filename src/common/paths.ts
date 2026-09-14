@@ -31,7 +31,10 @@ function escapesRoot(flavor: path.PlatformPath, candidate: string): boolean {
 }
 
 export function resolveInside(root: string, candidate: string): string {
-  if (escapesRoot(path.posix, candidate) || escapesRoot(path.win32, candidate)) {
+  if (
+    escapesRoot(path.posix, candidate) ||
+    escapesRoot(path.win32, candidate)
+  ) {
     throw new Error(`Path escapes root: ${candidate}`);
   }
 
@@ -40,7 +43,10 @@ export function resolveInside(root: string, candidate: string): string {
 
   // Final host-native containment check — belt-and-suspenders for any edge the
   // grammar checks above miss on this particular platform.
-  if (resolved !== resolvedRoot && !resolved.startsWith(resolvedRoot + path.sep)) {
+  if (
+    resolved !== resolvedRoot &&
+    !resolved.startsWith(resolvedRoot + path.sep)
+  ) {
     throw new Error(`Path escapes root: ${candidate}`);
   }
 

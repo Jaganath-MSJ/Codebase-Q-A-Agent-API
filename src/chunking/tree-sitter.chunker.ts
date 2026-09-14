@@ -1,6 +1,10 @@
 import { Parser, Language, Node } from 'web-tree-sitter';
 import type { Chunk, Chunker } from './chunker.interface';
-import { LineWindowChunker, TARGET_LINES, MIN_CHUNK_LINES } from './line-window.chunker';
+import {
+  LineWindowChunker,
+  TARGET_LINES,
+  MIN_CHUNK_LINES,
+} from './line-window.chunker';
 
 export type GrammarLang = 'typescript' | 'tsx' | 'javascript' | 'python';
 
@@ -38,47 +42,87 @@ interface TopLevelNode {
 }
 
 function isClassNode(type: string, lang: GrammarLang): boolean {
-  return lang === 'python' ? type === 'class_definition' : type === 'class_declaration';
+  return lang === 'python'
+    ? type === 'class_definition'
+    : type === 'class_declaration';
 }
 
 function isFunctionNode(type: string, lang: GrammarLang): boolean {
-  return lang === 'python' ? type === 'function_definition' : type === 'function_declaration';
+  return lang === 'python'
+    ? type === 'function_definition'
+    : type === 'function_declaration';
 }
 
 /** `export const helper = (a, b) => {...}` / `const helper = function (a, b) {...}`. */
 function isArrowConstCandidate(node: Node, lang: GrammarLang): boolean {
   if (lang === 'python') return false;
-  if (node.type !== 'lexical_declaration' && node.type !== 'variable_declaration') return false;
+  if (
+    node.type !== 'lexical_declaration' &&
+    node.type !== 'variable_declaration'
+  )
+    return false;
   if (node.namedChildCount !== 1) return false;
   const value = node.namedChild(0)?.childForFieldName('value');
-  return value?.type === 'arrow_function' || value?.type === 'function_expression';
+  return (
+    value?.type === 'arrow_function' || value?.type === 'function_expression'
+  );
 }
 
 function nodeRange(node: Node): { startLine: number; endLine: number } {
-  return { startLine: node.startPosition.row + 1, endLine: node.endPosition.row + 1 };
+  return {
+    startLine: node.startPosition.row + 1,
+    endLine: node.endPosition.row + 1,
+  };
 }
 
-function findTopLevelStructuralNodes(root: Node, lang: GrammarLang): TopLevelNode[] {
+function findTopLevelStructuralNodes(
+  root: Node,
+  lang: GrammarLang,
+): TopLevelNode[] {
   const results: TopLevelNode[] = [];
 
   for (const topNode of root.namedChildren) {
     if (!topNode) continue;
-    const inner = topNode.type === 'export_statement' ? (topNode.childForFieldName('declaration') ?? topNode) : topNode;
+    const inner =
+      topNode.type === 'export_statement'
+        ? (topNode.childForFieldName('declaration') ?? topNode)
+        : topNode;
     const { startLine, endLine } = nodeRange(topNode);
 
     if (isClassNode(inner.type, lang)) {
       const name = inner.childForFieldName('name')?.text;
-      if (name) results.push({ startLine, endLine, symbol: name, kind: 'class', node: inner });
+      if (name)
+        results.push({
+          startLine,
+          endLine,
+          symbol: name,
+          kind: 'class',
+          node: inner,
+        });
       continue;
     }
     if (isFunctionNode(inner.type, lang)) {
       const name = inner.childForFieldName('name')?.text;
-      if (name) results.push({ startLine, endLine, symbol: name, kind: 'function', node: inner });
+      if (name)
+        results.push({
+          startLine,
+          endLine,
+          symbol: name,
+          kind: 'function',
+          node: inner,
+        });
       continue;
     }
     if (isArrowConstCandidate(inner, lang)) {
       const name = inner.namedChild(0)?.childForFieldName('name')?.text;
-      if (name) results.push({ startLine, endLine, symbol: name, kind: 'function', node: inner });
+      if (name)
+        results.push({
+          startLine,
+          endLine,
+          symbol: name,
+          kind: 'function',
+          node: inner,
+        });
     }
   }
 
@@ -86,11 +130,16 @@ function findTopLevelStructuralNodes(root: Node, lang: GrammarLang): TopLevelNod
 }
 
 /** Direct method-shaped children of a class body, in source order. */
-function collectMethods(classNode: Node, className: string, lang: GrammarLang): Region[] {
+function collectMethods(
+  classNode: Node,
+  className: string,
+  lang: GrammarLang,
+): Region[] {
   const body = classNode.childForFieldName('body');
   if (!body) return [];
 
-  const wantedType = lang === 'python' ? 'function_definition' : 'method_definition';
+  const wantedType =
+    lang === 'python' ? 'function_definition' : 'method_definition';
   const methods: Region[] = [];
 
   // Python's class body is a `block` one level below the class_definition's
@@ -114,10 +163,15 @@ function collectMethods(classNode: Node, className: string, lang: GrammarLang): 
  * already-small region as protected — used for a class's methods, each of
  * which is a deliberately separated unit regardless of its own size.
  */
-function splitIfOversized(lines: string[], region: Region, forceProtected = false): Region[] {
+function splitIfOversized(
+  lines: string[],
+  region: Region,
+  forceProtected = false,
+): Region[] {
   const size = region.endLine - region.startLine + 1;
   if (size <= 0) return [];
-  if (size <= TARGET_LINES) return [{ ...region, protected: forceProtected || region.protected }];
+  if (size <= TARGET_LINES)
+    return [{ ...region, protected: forceProtected || region.protected }];
 
   const subLines = lines.slice(region.startLine - 1, region.endLine);
   return new LineWindowChunker().chunk(subLines).map((c) => ({
@@ -148,20 +202,37 @@ function regionize(
 
   for (const sub of subRegions) {
     if (sub.startLine > cursor) {
-      result.push(...splitIfOversized(lines, { startLine: cursor, endLine: sub.startLine - 1, symbol: gapSymbol }));
+      result.push(
+        ...splitIfOversized(lines, {
+          startLine: cursor,
+          endLine: sub.startLine - 1,
+          symbol: gapSymbol,
+        }),
+      );
     }
     result.push(...splitIfOversized(lines, sub, protectSubRegions));
     cursor = sub.endLine + 1;
   }
 
   if (cursor <= regionEnd) {
-    result.push(...splitIfOversized(lines, { startLine: cursor, endLine: regionEnd, symbol: gapSymbol }));
+    result.push(
+      ...splitIfOversized(lines, {
+        startLine: cursor,
+        endLine: regionEnd,
+        symbol: gapSymbol,
+      }),
+    );
   }
 
   return result;
 }
 
-function expandClass(lines: string[], classNode: Node, className: string, lang: GrammarLang): Region[] {
+function expandClass(
+  lines: string[],
+  classNode: Node,
+  className: string,
+  lang: GrammarLang,
+): Region[] {
   const { startLine, endLine } = nodeRange(classNode);
   const size = endLine - startLine + 1;
   if (size <= TARGET_LINES) return [{ startLine, endLine, symbol: className }];
@@ -194,11 +265,17 @@ function mergeTinyAdjacent(regions: Region[]): Region[] {
     const combinedSize = curr.endLine - prev.startLine + 1;
     const eligible = !prev.protected && !curr.protected;
 
-    if (eligible && contiguous && (prevSize < MIN_CHUNK_LINES || currSize < MIN_CHUNK_LINES) && combinedSize <= TARGET_LINES) {
+    if (
+      eligible &&
+      contiguous &&
+      (prevSize < MIN_CHUNK_LINES || currSize < MIN_CHUNK_LINES) &&
+      combinedSize <= TARGET_LINES
+    ) {
       merged[merged.length - 1] = {
         startLine: prev.startLine,
         endLine: curr.endLine,
-        symbol: [prev.symbol, curr.symbol].filter(Boolean).join(', ') || undefined,
+        symbol:
+          [prev.symbol, curr.symbol].filter(Boolean).join(', ') || undefined,
       };
     } else {
       merged.push(curr);
@@ -222,10 +299,14 @@ export class TreeSitterChunker implements Chunker {
   private readonly parser = new Parser();
   private readonly fallback = new LineWindowChunker();
 
-  constructor(private readonly languages: Partial<Record<GrammarLang, Language>>) {}
+  constructor(
+    private readonly languages: Partial<Record<GrammarLang, Language>>,
+  ) {}
 
   chunk(lines: string[], lang?: string | null): Chunk[] {
-    const grammarLang: GrammarLang | undefined = lang ? EXTENSION_TO_GRAMMAR[lang.toLowerCase()] : undefined;
+    const grammarLang: GrammarLang | undefined = lang
+      ? EXTENSION_TO_GRAMMAR[lang.toLowerCase()]
+      : undefined;
     if (!grammarLang || lines.length === 0) return this.fallback.chunk(lines);
 
     const language = this.languages[grammarLang];
@@ -239,10 +320,16 @@ export class TreeSitterChunker implements Chunker {
     const subRegions = topLevel.flatMap((n) =>
       n.kind === 'class'
         ? expandClass(lines, n.node, n.symbol, grammarLang)
-        : splitIfOversized(lines, { startLine: n.startLine, endLine: n.endLine, symbol: n.symbol }),
+        : splitIfOversized(lines, {
+            startLine: n.startLine,
+            endLine: n.endLine,
+            symbol: n.symbol,
+          }),
     );
 
-    const regions = mergeTinyAdjacent(regionize(lines, 1, lines.length, subRegions, undefined));
+    const regions = mergeTinyAdjacent(
+      regionize(lines, 1, lines.length, subRegions, undefined),
+    );
 
     return regions.map((r, ord) => ({
       ord,

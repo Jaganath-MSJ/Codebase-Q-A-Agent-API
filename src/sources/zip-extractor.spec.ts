@@ -4,7 +4,11 @@ import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ZipFile } from 'yazl';
 import { ZipSlipError } from './zip-path-guard';
-import { extractZipSafely, ZipBombError, ZipSymlinkError } from './zip-extractor';
+import {
+  extractZipSafely,
+  ZipBombError,
+  ZipSymlinkError,
+} from './zip-extractor';
 
 interface ZipEntrySpec {
   path: string;
@@ -22,7 +26,9 @@ function buildZip(entries: ZipEntrySpec[]): Promise<Buffer> {
     if (entry.directory) {
       zip.addEmptyDirectory(entry.path, { mode: entry.mode });
     } else {
-      zip.addBuffer(Buffer.from(entry.content ?? ''), entry.path, { mode: entry.mode });
+      zip.addBuffer(Buffer.from(entry.content ?? ''), entry.path, {
+        mode: entry.mode,
+      });
     }
   }
   zip.end();
@@ -38,7 +44,9 @@ function buildZip(entries: ZipEntrySpec[]): Promise<Buffer> {
 function needsPlaceholder(entryPath: string): boolean {
   const normalized = entryPath.replace(/\\/g, '/');
   return (
-    normalized.startsWith('/') || /^[a-zA-Z]:/.test(normalized) || normalized.split('/').includes('..')
+    normalized.startsWith('/') ||
+    /^[a-zA-Z]:/.test(normalized) ||
+    normalized.split('/').includes('..')
   );
 }
 
@@ -72,7 +80,10 @@ async function buildMaliciousZip(entries: ZipEntrySpec[]): Promise<Buffer> {
 
   let buf = await buildZip(safeEntries);
   for (const { placeholder, real } of substitutions) {
-    buf = Buffer.from(buf.toString('binary').split(placeholder).join(real), 'binary');
+    buf = Buffer.from(
+      buf.toString('binary').split(placeholder).join(real),
+      'binary',
+    );
   }
   return buf;
 }
@@ -95,53 +106,90 @@ afterEach(async () => {
 describe('extractZipSafely', () => {
   it('rejects a POSIX-style path-traversal entry, and writes nothing outside the root', async () => {
     const { zipPath, destRoot } = await tempDirs();
-    await writeFile(zipPath, await buildMaliciousZip([{ path: '../../evil.txt', content: 'pwned' }]));
+    await writeFile(
+      zipPath,
+      await buildMaliciousZip([{ path: '../../evil.txt', content: 'pwned' }]),
+    );
 
-    await expect(extractZipSafely(zipPath, destRoot)).rejects.toThrow(ZipSlipError);
-    await expect(readFile(path.join(workDir, 'evil.txt'), 'utf8')).rejects.toThrow();
+    await expect(extractZipSafely(zipPath, destRoot)).rejects.toThrow(
+      ZipSlipError,
+    );
+    await expect(
+      readFile(path.join(workDir, 'evil.txt'), 'utf8'),
+    ).rejects.toThrow();
   });
 
   it('rejects a Windows-style backslash path-traversal entry', async () => {
     const { zipPath, destRoot } = await tempDirs();
-    await writeFile(zipPath, await buildMaliciousZip([{ path: '..\\..\\evil.txt', content: 'pwned' }]));
+    await writeFile(
+      zipPath,
+      await buildMaliciousZip([{ path: '..\\..\\evil.txt', content: 'pwned' }]),
+    );
 
-    await expect(extractZipSafely(zipPath, destRoot)).rejects.toThrow(ZipSlipError);
-    await expect(readFile(path.join(workDir, 'evil.txt'), 'utf8')).rejects.toThrow();
+    await expect(extractZipSafely(zipPath, destRoot)).rejects.toThrow(
+      ZipSlipError,
+    );
+    await expect(
+      readFile(path.join(workDir, 'evil.txt'), 'utf8'),
+    ).rejects.toThrow();
   });
 
   it('rejects an absolute path entry', async () => {
     const { zipPath, destRoot } = await tempDirs();
-    await writeFile(zipPath, await buildMaliciousZip([{ path: '/etc/passwd', content: 'pwned' }]));
+    await writeFile(
+      zipPath,
+      await buildMaliciousZip([{ path: '/etc/passwd', content: 'pwned' }]),
+    );
 
-    await expect(extractZipSafely(zipPath, destRoot)).rejects.toThrow(ZipSlipError);
+    await expect(extractZipSafely(zipPath, destRoot)).rejects.toThrow(
+      ZipSlipError,
+    );
   });
 
   it('rejects a symlink entry', async () => {
     const { zipPath, destRoot } = await tempDirs();
     await writeFile(
       zipPath,
-      await buildZip([{ path: 'innocuous-link', content: '/etc', mode: S_IFLNK | 0o777 }]),
+      await buildZip([
+        { path: 'innocuous-link', content: '/etc', mode: S_IFLNK | 0o777 },
+      ]),
     );
 
-    await expect(extractZipSafely(zipPath, destRoot)).rejects.toThrow(ZipSymlinkError);
+    await expect(extractZipSafely(zipPath, destRoot)).rejects.toThrow(
+      ZipSymlinkError,
+    );
   });
 
   it('rejects a zip with more entries than the configured cap', async () => {
     const { zipPath, destRoot } = await tempDirs();
-    const entries = Array.from({ length: 5 }, (_, i) => ({ path: `file-${i}.txt`, content: 'x' }));
+    const entries = Array.from({ length: 5 }, (_, i) => ({
+      path: `file-${i}.txt`,
+      content: 'x',
+    }));
     await writeFile(zipPath, await buildZip(entries));
 
     await expect(
-      extractZipSafely(zipPath, destRoot, { maxEntries: 3, maxEntryBytes: 1_000, maxTotalBytes: 10_000 }),
+      extractZipSafely(zipPath, destRoot, {
+        maxEntries: 3,
+        maxEntryBytes: 1_000,
+        maxTotalBytes: 10_000,
+      }),
     ).rejects.toThrow(ZipBombError);
   });
 
   it('rejects an entry whose declared size exceeds the per-entry cap', async () => {
     const { zipPath, destRoot } = await tempDirs();
-    await writeFile(zipPath, await buildZip([{ path: 'big.txt', content: 'x'.repeat(1_000) }]));
+    await writeFile(
+      zipPath,
+      await buildZip([{ path: 'big.txt', content: 'x'.repeat(1_000) }]),
+    );
 
     await expect(
-      extractZipSafely(zipPath, destRoot, { maxEntries: 10, maxEntryBytes: 100, maxTotalBytes: 10_000 }),
+      extractZipSafely(zipPath, destRoot, {
+        maxEntries: 10,
+        maxEntryBytes: 100,
+        maxTotalBytes: 10_000,
+      }),
     ).rejects.toThrow(ZipBombError);
   });
 
@@ -156,7 +204,11 @@ describe('extractZipSafely', () => {
     );
 
     await expect(
-      extractZipSafely(zipPath, destRoot, { maxEntries: 10, maxEntryBytes: 100, maxTotalBytes: 100 }),
+      extractZipSafely(zipPath, destRoot, {
+        maxEntries: 10,
+        maxEntryBytes: 100,
+        maxTotalBytes: 100,
+      }),
     ).rejects.toThrow(ZipBombError);
   });
 
@@ -173,7 +225,11 @@ describe('extractZipSafely', () => {
 
     await extractZipSafely(zipPath, destRoot);
 
-    expect(await readFile(path.join(destRoot, 'src', 'index.ts'), 'utf8')).toBe('export const x = 1;\n');
-    expect(await readFile(path.join(destRoot, 'README.md'), 'utf8')).toBe('# hello\n');
+    expect(await readFile(path.join(destRoot, 'src', 'index.ts'), 'utf8')).toBe(
+      'export const x = 1;\n',
+    );
+    expect(await readFile(path.join(destRoot, 'README.md'), 'utf8')).toBe(
+      '# hello\n',
+    );
   });
 });

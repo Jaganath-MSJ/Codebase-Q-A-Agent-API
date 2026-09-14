@@ -31,14 +31,19 @@ const FENCE_RE = /```[\s\S]*?```/g;
 // from, what counts as a citation marker in this system.
 export const MARKER_RE = /\[(\d+(?:\s*,\s*\d+)*)\]|【(\d+)(?:†[^】]*)?】/g;
 
-export function parseCitations(answerText: string, evidence: EvidenceRef[]): Citation[] {
+export function parseCitations(
+  answerText: string,
+  evidence: EvidenceRef[],
+): Citation[] {
   const withoutFences = answerText.replace(FENCE_RE, '');
 
   const seen = new Set<number>();
   const citations: Citation[] = [];
 
   for (const match of withoutFences.matchAll(MARKER_RE)) {
-    const markers = match[1] ? match[1].split(',').map((n) => Number(n.trim())) : [Number(match[2])];
+    const markers = match[1]
+      ? match[1].split(',').map((n) => Number(n.trim()))
+      : [Number(match[2])];
 
     for (const marker of markers) {
       if (seen.has(marker)) continue;

@@ -1,7 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ChangeAnalysisCitationDto {
-  @ApiProperty({ description: '1-based marker as it appears in the summary, e.g. [1]' })
+  @ApiProperty({
+    description: '1-based marker as it appears in the summary, e.g. [1]',
+  })
   marker!: number;
 
   @ApiProperty()
@@ -47,7 +49,8 @@ export class ChangeAnalysisStatusDto {
   @ApiProperty({
     type: ChangeAnalysisDto,
     nullable: true,
-    description: 'The analysis, if one has been generated (may be a stale one while a newer is generating); null otherwise.',
+    description:
+      'The analysis, if one has been generated (may be a stale one while a newer is generating); null otherwise.',
   })
   analysis!: ChangeAnalysisDto | null;
 }

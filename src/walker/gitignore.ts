@@ -44,8 +44,10 @@ export async function loadGitignoreFilter(
   return {
     isIgnored(relPath: string): boolean {
       for (const { dir, ig } of levels) {
-        if (dir !== '' && relPath !== dir && !relPath.startsWith(`${dir}/`)) continue;
-        const relativeToLevel = dir === '' ? relPath : relPath.slice(dir.length + 1);
+        if (dir !== '' && relPath !== dir && !relPath.startsWith(`${dir}/`))
+          continue;
+        const relativeToLevel =
+          dir === '' ? relPath : relPath.slice(dir.length + 1);
         if (relativeToLevel && ig.ignores(relativeToLevel)) return true;
       }
       return false;

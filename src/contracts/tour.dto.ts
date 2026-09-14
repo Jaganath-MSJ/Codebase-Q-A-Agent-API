@@ -1,7 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class TourCitationDto {
-  @ApiProperty({ description: '1-based marker as it appears in the section body, e.g. [1]' })
+  @ApiProperty({
+    description: '1-based marker as it appears in the section body, e.g. [1]',
+  })
   marker!: number;
 
   @ApiProperty()
@@ -49,7 +51,8 @@ export class TourStatusDto {
   @ApiProperty({
     type: TourDto,
     nullable: true,
-    description: 'The tour, if one has been generated (may be a stale one while a newer is generating); null otherwise.',
+    description:
+      'The tour, if one has been generated (may be a stale one while a newer is generating); null otherwise.',
   })
   tour!: TourDto | null;
 }

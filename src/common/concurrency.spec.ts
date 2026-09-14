@@ -16,13 +16,17 @@ describe('mapWithConcurrency', () => {
   it('never exceeds the concurrency limit', async () => {
     let inFlight = 0;
     let peak = 0;
-    await mapWithConcurrency(Array.from({ length: 20 }, (_, i) => i), 4, async (n) => {
-      inFlight++;
-      peak = Math.max(peak, inFlight);
-      await tick();
-      inFlight--;
-      return n;
-    });
+    await mapWithConcurrency(
+      Array.from({ length: 20 }, (_, i) => i),
+      4,
+      async (n) => {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await tick();
+        inFlight--;
+        return n;
+      },
+    );
     expect(peak).toBeLessThanOrEqual(4);
     expect(peak).toBeGreaterThan(1); // actually ran concurrently
   });

@@ -12,7 +12,11 @@ function isBlankLine(line: string): boolean {
   return line.trim() === '';
 }
 
-function findBoundary(lines: string[], start: number, naiveEnd: number): number {
+function findBoundary(
+  lines: string[],
+  start: number,
+  naiveEnd: number,
+): number {
   const floor = Math.max(start + MIN_CHUNK_LINES, start + 1);
   const searchFrom = Math.max(floor, naiveEnd - BOUNDARY_SEARCH_WINDOW);
   const searchTo = Math.min(lines.length, naiveEnd + BOUNDARY_SEARCH_WINDOW);
@@ -56,7 +60,9 @@ export class LineWindowChunker implements Chunker {
     while (start < lines.length) {
       const naiveEnd = Math.min(start + TARGET_LINES, lines.length);
       const end =
-        naiveEnd >= lines.length ? lines.length : findBoundary(lines, start, naiveEnd);
+        naiveEnd >= lines.length
+          ? lines.length
+          : findBoundary(lines, start, naiveEnd);
 
       chunks.push({
         ord,

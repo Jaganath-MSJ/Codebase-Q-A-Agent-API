@@ -8,7 +8,13 @@ import { ZipUploadAdapter } from './zip-upload.adapter';
 
 @Module({
   imports: [CredentialsModule],
-  providers: [LocalPathAdapter, GitUrlAdapter, ZipUploadAdapter, GitPrivateAdapter, SourceAdapterRegistry],
+  providers: [
+    LocalPathAdapter,
+    GitUrlAdapter,
+    ZipUploadAdapter,
+    GitPrivateAdapter,
+    SourceAdapterRegistry,
+  ],
   exports: [SourceAdapterRegistry],
 })
 export class SourcesModule {}

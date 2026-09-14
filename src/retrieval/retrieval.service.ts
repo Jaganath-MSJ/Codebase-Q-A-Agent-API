@@ -1,4 +1,9 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ProjectsRepository } from '../db/repositories/projects.repository';
 import { EMBEDDING_PROVIDER_TOKEN } from '../embeddings/embeddings.module';
 import type { EmbeddingProvider } from '../embeddings/embedding-provider.interface';
@@ -20,7 +25,8 @@ export class RetrievalService {
     private readonly trigramRetriever: TrigramRetriever,
     private readonly hybridRetriever: HybridRetriever,
     private readonly referencesRetriever: ReferencesRetriever,
-    @Inject(EMBEDDING_PROVIDER_TOKEN) private readonly embeddingProvider: EmbeddingProvider,
+    @Inject(EMBEDDING_PROVIDER_TOKEN)
+    private readonly embeddingProvider: EmbeddingProvider,
   ) {}
 
   async search(
@@ -107,7 +113,10 @@ export class RetrievalService {
   }
 
   /** Exact identifier match, grouped by file by the caller — see `ReferencesRetriever`. */
-  async findReferences(projectId: string, symbol: string): Promise<ScoredChunk[]> {
+  async findReferences(
+    projectId: string,
+    symbol: string,
+  ): Promise<ScoredChunk[]> {
     const project = await this.projectsRepository.findById(projectId);
     if (!project) throw new NotFoundException(`Project ${projectId} not found`);
 

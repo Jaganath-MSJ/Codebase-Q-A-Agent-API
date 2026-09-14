@@ -22,7 +22,9 @@ const MODEL_ID = 'nomic-ai/nomic-embed-text-v1.5';
 const MAX_EMBED_TEXT_CHARS = 4500;
 
 export function truncateForEmbedding(text: string): string {
-  return text.length > MAX_EMBED_TEXT_CHARS ? text.slice(0, MAX_EMBED_TEXT_CHARS) : text;
+  return text.length > MAX_EMBED_TEXT_CHARS
+    ? text.slice(0, MAX_EMBED_TEXT_CHARS)
+    : text;
 }
 
 // transformers.js pads every sequence in a batch to the longest sequence in
@@ -42,7 +44,8 @@ export function truncateForEmbedding(text: string): string {
 // is isolated, so peak memory stays where the flat-4 design already proved safe.
 const MAX_OUTER_BATCH = 64;
 export const EMBED_CHAR_CEILING = MAX_EMBED_TEXT_CHARS;
-export const SUBBATCH_PADDED_BUDGET = 4 * MAX_EMBED_TEXT_CHARS * MAX_EMBED_TEXT_CHARS;
+export const SUBBATCH_PADDED_BUDGET =
+  4 * MAX_EMBED_TEXT_CHARS * MAX_EMBED_TEXT_CHARS;
 
 /**
  * Group indices into memory-safe sub-batches. Sorted by length so each batch's
@@ -59,7 +62,10 @@ export function planLengthBucketedBatches(lengths: number[]): number[][] {
   for (const i of order) {
     const len = Math.max(1, lengths[i]!);
     const candidateMax = Math.max(curMaxLen, len);
-    if (cur.length > 0 && (cur.length + 1) * candidateMax * candidateMax > SUBBATCH_PADDED_BUDGET) {
+    if (
+      cur.length > 0 &&
+      (cur.length + 1) * candidateMax * candidateMax > SUBBATCH_PADDED_BUDGET
+    ) {
       batches.push(cur);
       cur = [];
       curMaxLen = 0;
@@ -89,12 +95,15 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
 
   async embedQuery(text: string): Promise<number[]> {
     const [vector] = await this.embed([`search_query: ${text}`]);
-    if (!vector) throw new Error('Embedding pipeline returned no output for query');
+    if (!vector)
+      throw new Error('Embedding pipeline returned no output for query');
     return vector;
   }
 
   private async getPipeline(): Promise<FeatureExtractionPipeline> {
-    this.pipelinePromise ??= pipeline('feature-extraction', MODEL_ID, { dtype: 'q8' });
+    this.pipelinePromise ??= pipeline('feature-extraction', MODEL_ID, {
+      dtype: 'q8',
+    });
     return this.pipelinePromise;
   }
 
@@ -114,7 +123,9 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
       // output — turn it into a loud, retryable error here (the indexer re-checks
       // the full batch length and per-vector dimension too).
       if (vectors.length !== group.length) {
-        throw new Error(`Embedding sub-batch returned ${vectors.length} vectors for ${group.length} inputs`);
+        throw new Error(
+          `Embedding sub-batch returned ${vectors.length} vectors for ${group.length} inputs`,
+        );
       }
       group.forEach((idx, j) => {
         results[idx] = vectors[j]!;

@@ -10,11 +10,15 @@ const MAX_GLOB_LENGTH = 256;
 
 export const LIST_FILES_TOOL: ToolDefinition = {
   name: 'list_files',
-  description: 'List files matching a glob, e.g. "src/**/*.controller.ts". Use to understand structure.',
+  description:
+    'List files matching a glob, e.g. "src/**/*.controller.ts". Use to understand structure.',
   parameters: {
     type: 'object',
     properties: {
-      glob: { type: 'string', description: 'Glob pattern against repo-relative, forward-slash paths.' },
+      glob: {
+        type: 'string',
+        description: 'Glob pattern against repo-relative, forward-slash paths.',
+      },
     },
     required: ['glob'],
   },
@@ -27,16 +31,29 @@ export async function listFilesTool(
   args: Record<string, unknown>,
 ): Promise<ToolExecutionResult> {
   const glob = typeof args.glob === 'string' ? args.glob.trim() : '';
-  if (!glob) return { regions: [], note: 'Error: list_files requires a non-empty "glob" string argument.' };
+  if (!glob)
+    return {
+      regions: [],
+      note: 'Error: list_files requires a non-empty "glob" string argument.',
+    };
   if (glob.length > MAX_GLOB_LENGTH)
-    return { regions: [], note: `Error: list_files "glob" is too long (max ${MAX_GLOB_LENGTH} characters).` };
+    return {
+      regions: [],
+      note: `Error: list_files "glob" is too long (max ${MAX_GLOB_LENGTH} characters).`,
+    };
 
   const files = await filesRepository.findAllByProjectId(projectId);
-  const matches = files.map((f) => f.path).filter((path) => matchesGlob(path, glob)).sort();
+  const matches = files
+    .map((f) => f.path)
+    .filter((path) => matchesGlob(path, glob))
+    .sort();
 
   if (matches.length === 0) return { regions: [], note: 'No files matched.' };
 
   const shown = matches.slice(0, MAX_RESULTS);
-  const suffix = matches.length > MAX_RESULTS ? `\n... [${matches.length - MAX_RESULTS} more, truncated]` : '';
+  const suffix =
+    matches.length > MAX_RESULTS
+      ? `\n... [${matches.length - MAX_RESULTS} more, truncated]`
+      : '';
   return { regions: [], note: shown.join('\n') + suffix };
 }

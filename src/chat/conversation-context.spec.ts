@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { evictedExchanges, recentWindow, toExchanges, truncateAnswer } from './conversation-context';
+import {
+  evictedExchanges,
+  recentWindow,
+  toExchanges,
+  truncateAnswer,
+} from './conversation-context';
 
 function message(id: string, role: string, content = '', status = 'complete') {
   return { id, role, content, status };
@@ -14,8 +19,20 @@ describe('toExchanges', () => {
       message('a2', 'assistant', 'a2'),
     ];
     expect(toExchanges(messages)).toEqual([
-      { userMessageId: 'u1', assistantMessageId: 'a1', question: 'q1', answer: 'a1', answerStatus: 'complete' },
-      { userMessageId: 'u2', assistantMessageId: 'a2', question: 'q2', answer: 'a2', answerStatus: 'complete' },
+      {
+        userMessageId: 'u1',
+        assistantMessageId: 'a1',
+        question: 'q1',
+        answer: 'a1',
+        answerStatus: 'complete',
+      },
+      {
+        userMessageId: 'u2',
+        assistantMessageId: 'a2',
+        question: 'q2',
+        answer: 'a2',
+        answerStatus: 'complete',
+      },
     ]);
   });
 
@@ -25,7 +42,10 @@ describe('toExchanges', () => {
   });
 
   it('carries the assistant status through, for filtering incomplete turns downstream', () => {
-    const messages = [message('u1', 'user', 'q1'), message('a1', 'assistant', '', 'streaming')];
+    const messages = [
+      message('u1', 'user', 'q1'),
+      message('a1', 'assistant', '', 'streaming'),
+    ];
     expect(toExchanges(messages)[0]!.answerStatus).toBe('streaming');
   });
 });
@@ -41,7 +61,10 @@ describe('recentWindow', () => {
   ]);
 
   it('takes the last N, oldest first', () => {
-    expect(recentWindow(exchanges, 2).map((e) => e.question)).toEqual(['q2', 'q3']);
+    expect(recentWindow(exchanges, 2).map((e) => e.question)).toEqual([
+      'q2',
+      'q3',
+    ]);
   });
 
   it('returns everything if N exceeds the length', () => {
@@ -86,7 +109,9 @@ describe('evictedExchanges', () => {
   ]);
 
   it('returns everything older than the window when nothing is summarized yet', () => {
-    expect(evictedExchanges(exchanges, 3, null).map((e) => e.question)).toEqual(['q1']);
+    expect(evictedExchanges(exchanges, 3, null).map((e) => e.question)).toEqual(
+      ['q1'],
+    );
   });
 
   it('returns only newly-evicted exchanges once some are already summarized', () => {
@@ -115,6 +140,8 @@ describe('evictedExchanges', () => {
       message('a8', 'assistant', 'a8'),
     ]);
     // window=3 keeps q6,q7,q8; the watermark 'a4' predates this tail and isn't in it.
-    expect(evictedExchanges(tail, 3, 'a4').map((e) => e.question)).toEqual(['q5']);
+    expect(evictedExchanges(tail, 3, 'a4').map((e) => e.question)).toEqual([
+      'q5',
+    ]);
   });
 });

@@ -14,7 +14,11 @@ import { TourService } from './tour.service';
 import { TourDto, TourGenerateResponseDto, TourStatusDto } from '../contracts';
 
 function toTourDto(record: TourRecord): TourDto {
-  return { summary: record.summary, sections: record.sections, generatedAt: record.generatedAt };
+  return {
+    summary: record.summary,
+    sections: record.sections,
+    generatedAt: record.generatedAt,
+  };
 }
 
 @ApiTags('tour')
@@ -36,12 +40,14 @@ export class TourController {
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiAcceptedResponse({ type: TourGenerateResponseDto })
-  async regenerate(@Param('id', ParseUUIDPipe) id: string): Promise<TourGenerateResponseDto> {
+  regenerate(@Param('id', ParseUUIDPipe) id: string): TourGenerateResponseDto {
     // Fire-and-forget: a real tour takes 5-8 sequential model calls, too long
     // to hold an HTTP request open for — the client polls GET back until
     // `generatedAt` moves. Errors are caught and logged inside the service.
     this.tourService.generate(id, true).catch((err) => {
-      this.logger.error(`Tour regeneration failed for project ${id}: ${String(err)}`);
+      this.logger.error(
+        `Tour regeneration failed for project ${id}: ${String(err)}`,
+      );
     });
     return { status: 'generating' };
   }

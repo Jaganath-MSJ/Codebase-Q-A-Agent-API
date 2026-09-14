@@ -1,5 +1,24 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post, Query, Req, Res } from '@nestjs/common';
-import { ApiOkResponse, ApiCreatedResponse, ApiAcceptedResponse, ApiNoContentResponse, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  Req,
+  Res,
+} from '@nestjs/common';
+import {
+  ApiOkResponse,
+  ApiCreatedResponse,
+  ApiAcceptedResponse,
+  ApiNoContentResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { ProjectsService } from './projects.service';
 import { JobsService } from '../jobs/jobs.service';
@@ -54,7 +73,9 @@ export class ProjectsController {
     const rows = await this.projectsService.findAll();
     // One batched query for every project's latest job (Phase 12.16) so the
     // dashboard reads job state from this list instead of a fetch per row.
-    const latest = await this.jobsService.findLatestForProjects(rows.map((r) => r.id));
+    const latest = await this.jobsService.findLatestForProjects(
+      rows.map((r) => r.id),
+    );
     return rows.map((row) => {
       const job = latest.get(row.id);
       return toDto(row, job ? toJobDto(job) : null);
@@ -64,14 +85,22 @@ export class ProjectsController {
   @Post(':id/index')
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiAcceptedResponse({ type: JobDto })
-  async index(@Param('id', ParseUUIDPipe) id: string, @Body() body: IndexRequestDto): Promise<JobDto> {
-    const job = await this.jobsService.enqueue(id, body.force ? 'force' : 'initial');
+  async index(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: IndexRequestDto,
+  ): Promise<JobDto> {
+    const job = await this.jobsService.enqueue(
+      id,
+      body.force ? 'force' : 'initial',
+    );
     return toJobDto(job);
   }
 
   @Get(':id/cost-estimate')
   @ApiOkResponse({ type: CostEstimateDto })
-  async getCostEstimate(@Param('id', ParseUUIDPipe) id: string): Promise<CostEstimateDto> {
+  async getCostEstimate(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<CostEstimateDto> {
     return this.indexingService.estimateIndexCost(id);
   }
 
@@ -107,7 +136,9 @@ export class ProjectsController {
 
   @Get(':id/storage')
   @ApiOkResponse({ type: ProjectStorageDto })
-  async getStorage(@Param('id', ParseUUIDPipe) id: string): Promise<ProjectStorageDto> {
+  async getStorage(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<ProjectStorageDto> {
     return this.projectsService.getStorage(id);
   }
 

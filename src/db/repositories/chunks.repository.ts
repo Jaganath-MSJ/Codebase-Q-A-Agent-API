@@ -36,7 +36,9 @@ export class ChunksRepository {
     return this.db.insert(chunks).values(rows).returning();
   }
 
-  async findWithoutEmbedding(projectId: string): Promise<PendingEmbeddingChunk[]> {
+  async findWithoutEmbedding(
+    projectId: string,
+  ): Promise<PendingEmbeddingChunk[]> {
     return this.db
       .select({
         id: chunks.id,
@@ -59,13 +61,17 @@ export class ChunksRepository {
    * floats (the permanent embedding dimension); the text is cast to halfvec
    * server-side, matching the column type.
    */
-  async setEmbeddingsBulk(pairs: { id: string; embedding: number[] }[]): Promise<void> {
+  async setEmbeddingsBulk(
+    pairs: { id: string; embedding: number[] }[],
+  ): Promise<void> {
     if (pairs.length === 0) return;
     const ids: string[] = [];
     const vectors: string[] = [];
     for (const { id, embedding } of pairs) {
       if (embedding.length !== 768) {
-        throw new Error(`Expected a 768-dim embedding for chunk ${id}, got ${embedding.length}`);
+        throw new Error(
+          `Expected a 768-dim embedding for chunk ${id}, got ${embedding.length}`,
+        );
       }
       ids.push(id);
       vectors.push(`[${embedding.join(',')}]`);
@@ -137,7 +143,10 @@ export class ChunksRepository {
    * chunk order) — change-analysis diffs up to MAX_FILES changed files per
    * commit and would otherwise issue one query per file.
    */
-  async findByPaths(projectId: string, paths: string[]): Promise<Map<string, ChunkOfFile[]>> {
+  async findByPaths(
+    projectId: string,
+    paths: string[],
+  ): Promise<Map<string, ChunkOfFile[]>> {
     const byPath = new Map<string, ChunkOfFile[]>();
     if (paths.length === 0) return byPath;
 

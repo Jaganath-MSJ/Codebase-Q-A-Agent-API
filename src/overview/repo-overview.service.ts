@@ -32,7 +32,10 @@ export class RepoOverviewService {
     fallbackName: string,
     files: OverviewFileEntry[],
   ): Promise<string> {
-    const { name, scripts, frameworks } = await this.readPackageJson(workspacePath, fallbackName);
+    const { name, scripts, frameworks } = await this.readPackageJson(
+      workspacePath,
+      fallbackName,
+    );
     const readmeExcerpt = await this.readReadmeExcerpt(workspacePath, files);
 
     return renderOverviewDigest({
@@ -51,7 +54,9 @@ export class RepoOverviewService {
     fallbackName: string,
   ): Promise<{ name: string; scripts: string[]; frameworks: string[] }> {
     try {
-      const { text } = await readSourceFile(path.join(workspacePath, 'package.json'));
+      const { text } = await readSourceFile(
+        path.join(workspacePath, 'package.json'),
+      );
       const pkg = JSON.parse(text) as PackageJsonShape;
       const dependencies = { ...pkg.dependencies, ...pkg.devDependencies };
       return {
@@ -68,11 +73,15 @@ export class RepoOverviewService {
     workspacePath: string,
     files: OverviewFileEntry[],
   ): Promise<string | null> {
-    const readmeEntry = files.find((f) => !f.relPath.includes('/') && README_RE.test(f.relPath));
+    const readmeEntry = files.find(
+      (f) => !f.relPath.includes('/') && README_RE.test(f.relPath),
+    );
     if (!readmeEntry) return null;
 
     try {
-      const { text } = await readSourceFile(path.join(workspacePath, readmeEntry.relPath));
+      const { text } = await readSourceFile(
+        path.join(workspacePath, readmeEntry.relPath),
+      );
       return firstParagraph(text);
     } catch {
       return null;

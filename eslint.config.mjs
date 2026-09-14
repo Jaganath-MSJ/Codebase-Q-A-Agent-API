@@ -32,4 +32,18 @@ export default tseslint.config(
       "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },
+  {
+    // Test mocks legitimately implement async interfaces (ChatProvider.stream's
+    // AsyncIterable, EmbeddingProvider.embedQuery's Promise, ToolExecutor.execute)
+    // without awaiting or yielding — the `async`/generator form is required to
+    // satisfy the signature, so require-await/require-yield are false positives
+    // here. unbound-method is the standard test noise from passing mocked method
+    // references to matchers like toHaveBeenCalledWith.
+    files: ['**/*.spec.ts', '**/*.e2e-spec.ts', 'test/**/*.ts'],
+    rules: {
+      '@typescript-eslint/require-await': 'off',
+      'require-yield': 'off',
+      '@typescript-eslint/unbound-method': 'off',
+    },
+  },
 );

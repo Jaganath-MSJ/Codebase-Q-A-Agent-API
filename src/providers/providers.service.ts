@@ -11,7 +11,8 @@ import type { ProviderStatusDto } from '../contracts';
 @Injectable()
 export class ProvidersService {
   constructor(
-    @Inject(EMBEDDING_PROVIDER_TOKEN) private readonly embeddingProvider: EmbeddingProvider,
+    @Inject(EMBEDDING_PROVIDER_TOKEN)
+    private readonly embeddingProvider: EmbeddingProvider,
     @Inject(CHAT_PROVIDER_TOKEN) private readonly chatProvider: ChatProvider,
     private readonly jobsRepository: JobsRepository,
     private readonly projectsRepository: ProjectsRepository,
@@ -28,8 +29,16 @@ export class ProvidersService {
     // just surfaces it proactively, for every project at once, instead of
     // waiting for someone to hit it.
     const staleProjects = projects
-      .filter((p) => p.embeddingModel !== null && p.embeddingModel !== this.embeddingProvider.id)
-      .map((p) => ({ id: p.id, name: p.name, embeddingModel: p.embeddingModel }));
+      .filter(
+        (p) =>
+          p.embeddingModel !== null &&
+          p.embeddingModel !== this.embeddingProvider.id,
+      )
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        embeddingModel: p.embeddingModel,
+      }));
 
     return {
       embedding: {

@@ -29,8 +29,12 @@ describe('matchesGlob', () => {
   });
 
   it('does not match a suffix-only pattern against an unrelated path', () => {
-    expect(matchesGlob('src/auth.controller.ts', 'src/**/*.controller.ts')).toBe(true);
-    expect(matchesGlob('src/auth.service.ts', 'src/**/*.controller.ts')).toBe(false);
+    expect(
+      matchesGlob('src/auth.controller.ts', 'src/**/*.controller.ts'),
+    ).toBe(true);
+    expect(matchesGlob('src/auth.service.ts', 'src/**/*.controller.ts')).toBe(
+      false,
+    );
   });
 
   it('handles ** matching everything and **/x at the root', () => {

@@ -1,4 +1,9 @@
-import type { ChatCompletion, ChatEvent, ChatProvider, ChatRequest } from './chat-provider.interface';
+import type {
+  ChatCompletion,
+  ChatEvent,
+  ChatProvider,
+  ChatRequest,
+} from './chat-provider.interface';
 
 /**
  * Retriable = the provider is temporarily unavailable or quota-limited, not a
@@ -33,7 +38,9 @@ export function isRetriableProviderError(err: unknown): boolean {
   // unrelated "429" that happens to appear in an error string.
   if (
     /\b(429|503)\b/.test(msg) &&
-    /(quota|rate limit|exhaust|unavailable|overloaded|too many requests|service unavailable)/i.test(msg)
+    /(quota|rate limit|exhaust|unavailable|overloaded|too many requests|service unavailable)/i.test(
+      msg,
+    )
   ) {
     return true;
   }
@@ -63,7 +70,10 @@ export class FailoverChatProvider implements ChatProvider {
     private readonly secondary: ChatProvider,
   ) {
     this.id = primary.id;
-    this.contextWindow = Math.min(primary.contextWindow, secondary.contextWindow);
+    this.contextWindow = Math.min(
+      primary.contextWindow,
+      secondary.contextWindow,
+    );
     this.supportsTools = primary.supportsTools || secondary.supportsTools;
   }
 
@@ -75,7 +85,10 @@ export class FailoverChatProvider implements ChatProvider {
     return true;
   }
 
-  async complete(req: ChatRequest, signal?: AbortSignal): Promise<ChatCompletion> {
+  async complete(
+    req: ChatRequest,
+    signal?: AbortSignal,
+  ): Promise<ChatCompletion> {
     try {
       return await this.primary.complete(req, signal);
     } catch (err) {
@@ -84,7 +97,10 @@ export class FailoverChatProvider implements ChatProvider {
     }
   }
 
-  async *stream(req: ChatRequest, signal?: AbortSignal): AsyncIterable<ChatEvent> {
+  async *stream(
+    req: ChatRequest,
+    signal?: AbortSignal,
+  ): AsyncIterable<ChatEvent> {
     let emittedText = false;
     try {
       for await (const event of this.primary.stream(req, signal)) {

@@ -19,7 +19,10 @@ const DEFAULT_K = 60;
  * An id absent from a list contributes 0 from that list, matching a
  * FULL OUTER JOIN across the arms.
  */
-export function reciprocalRankFusion(lists: RankedList[], k = DEFAULT_K): FusedResult[] {
+export function reciprocalRankFusion(
+  lists: RankedList[],
+  k = DEFAULT_K,
+): FusedResult[] {
   const scores = new Map<string, number>();
 
   for (const { ids, weight = 1 } of lists) {

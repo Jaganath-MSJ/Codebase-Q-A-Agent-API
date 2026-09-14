@@ -8,7 +8,10 @@ import type {
   ToolCall,
   ToolDefinition,
 } from '../llm/chat-provider.interface';
-import type { ToolExecutionResult, ToolExecutor } from '../tools/tool-executor.interface';
+import type {
+  ToolExecutionResult,
+  ToolExecutor,
+} from '../tools/tool-executor.interface';
 
 class ScriptedChatProvider implements ChatProvider {
   readonly id = 'scripted:test';
@@ -32,7 +35,9 @@ class ScriptedChatProvider implements ChatProvider {
   }
 
   async complete(): Promise<ChatCompletion> {
-    throw new Error('ScriptedChatProvider.complete is not used by the agent loop');
+    throw new Error(
+      'ScriptedChatProvider.complete is not used by the agent loop',
+    );
   }
 }
 
@@ -42,7 +47,10 @@ class FakeToolExecutor implements ToolExecutor {
   ];
   calls: ToolCall[] = [];
 
-  async execute(_projectId: string, call: ToolCall): Promise<ToolExecutionResult> {
+  async execute(
+    _projectId: string,
+    call: ToolCall,
+  ): Promise<ToolExecutionResult> {
     this.calls.push(call);
     return { regions: [], note: `result for ${call.name}` };
   }
@@ -57,7 +65,16 @@ class RegionToolExecutor implements ToolExecutor {
 
   async execute(): Promise<ToolExecutionResult> {
     this.calls++;
-    return { regions: [{ path: `src/${this.calls}.ts`, startLine: 1, endLine: 1, content: `content ${this.calls}` }] };
+    return {
+      regions: [
+        {
+          path: `src/${this.calls}.ts`,
+          startLine: 1,
+          endLine: 1,
+          content: `content ${this.calls}`,
+        },
+      ],
+    };
   }
 }
 
@@ -77,12 +94,24 @@ describe('runAgentLoop', () => {
     const tools = new FakeToolExecutor();
 
     const events = await drain(
-      runAgentLoop(provider, tools, 'proj-1', 'system', 'question', new AbortController().signal),
+      runAgentLoop(
+        provider,
+        tools,
+        'proj-1',
+        'system',
+        'question',
+        new AbortController().signal,
+      ),
     );
 
     const done = events.at(-1);
     expect(done).toEqual(
-      expect.objectContaining({ type: 'done', text: 'The answer.', stopReason: 'stop', evidence: [] }),
+      expect.objectContaining({
+        type: 'done',
+        text: 'The answer.',
+        stopReason: 'stop',
+        evidence: [],
+      }),
     );
     expect(tools.calls).toHaveLength(0);
     expect(provider.step).toBe(1);
@@ -92,15 +121,30 @@ describe('runAgentLoop', () => {
     const provider = new ScriptedChatProvider((step) =>
       step === 0
         ? [
-            { type: 'tool_call', id: 'call-1', name: 'search_code', args: { query: 'validateUser' } },
+            {
+              type: 'tool_call',
+              id: 'call-1',
+              name: 'search_code',
+              args: { query: 'validateUser' },
+            },
             { type: 'done', stopReason: 'tool_use' },
           ]
-        : [{ type: 'text', delta: 'Found it.' }, { type: 'done', stopReason: 'stop' }],
+        : [
+            { type: 'text', delta: 'Found it.' },
+            { type: 'done', stopReason: 'stop' },
+          ],
     );
     const tools = new FakeToolExecutor();
 
     const events = await drain(
-      runAgentLoop(provider, tools, 'proj-1', 'system', 'question', new AbortController().signal),
+      runAgentLoop(
+        provider,
+        tools,
+        'proj-1',
+        'system',
+        'question',
+        new AbortController().signal,
+      ),
     );
 
     expect(events).toContainEqual({
@@ -109,42 +153,76 @@ describe('runAgentLoop', () => {
       args: { query: 'validateUser' },
     });
     const done = events.at(-1);
-    expect(done).toEqual(expect.objectContaining({ type: 'done', text: 'Found it.', stopReason: 'stop' }));
+    expect(done).toEqual(
+      expect.objectContaining({
+        type: 'done',
+        text: 'Found it.',
+        stopReason: 'stop',
+      }),
+    );
     expect(tools.calls).toHaveLength(1);
     expect(provider.step).toBe(2);
   });
 
   it('stops after exactly 8 steps and reports budget_exhausted when the model never stops calling tools', async () => {
     const provider = new ScriptedChatProvider(() => [
-      { type: 'tool_call', id: 'call-loop', name: 'search_code', args: { query: 'x' } },
+      {
+        type: 'tool_call',
+        id: 'call-loop',
+        name: 'search_code',
+        args: { query: 'x' },
+      },
       { type: 'done', stopReason: 'tool_use' },
     ]);
     const tools = new FakeToolExecutor();
 
     const events = await drain(
-      runAgentLoop(provider, tools, 'proj-1', 'system', 'question', new AbortController().signal),
+      runAgentLoop(
+        provider,
+        tools,
+        'proj-1',
+        'system',
+        'question',
+        new AbortController().signal,
+      ),
     );
 
     const done = events.at(-1);
-    expect(done).toEqual(expect.objectContaining({ type: 'done', stopReason: 'budget_exhausted' }));
+    expect(done).toEqual(
+      expect.objectContaining({ type: 'done', stopReason: 'budget_exhausted' }),
+    );
     expect(provider.step).toBe(8);
     expect(tools.calls).toHaveLength(8);
   });
 
   it('stops with budget_exhausted once accumulated tokens cross the cap, even well under the 8-step limit', async () => {
     const provider = new ScriptedChatProvider(() => [
-      { type: 'tool_call', id: 'call-loop', name: 'search_code', args: { query: 'x' } },
+      {
+        type: 'tool_call',
+        id: 'call-loop',
+        name: 'search_code',
+        args: { query: 'x' },
+      },
       { type: 'usage', inputTokens: 20_000, outputTokens: 5_000 },
       { type: 'done', stopReason: 'tool_use' },
     ]);
     const tools = new FakeToolExecutor();
 
     const events = await drain(
-      runAgentLoop(provider, tools, 'proj-1', 'system', 'question', new AbortController().signal),
+      runAgentLoop(
+        provider,
+        tools,
+        'proj-1',
+        'system',
+        'question',
+        new AbortController().signal,
+      ),
     );
 
     const done = events.at(-1);
-    expect(done).toEqual(expect.objectContaining({ type: 'done', stopReason: 'budget_exhausted' }));
+    expect(done).toEqual(
+      expect.objectContaining({ type: 'done', stopReason: 'budget_exhausted' }),
+    );
     // 25,000 tokens/step crosses the 50,000 cap after step 2, well short of MAX_STEPS=8.
     expect(provider.step).toBe(2);
     expect(tools.calls).toHaveLength(1);
@@ -155,18 +233,40 @@ describe('runAgentLoop', () => {
     const tools = new FakeToolExecutor();
 
     await expect(
-      drain(runAgentLoop(provider, tools, 'proj-1', 'system', 'question', new AbortController().signal)),
+      drain(
+        runAgentLoop(
+          provider,
+          tools,
+          'proj-1',
+          'system',
+          'question',
+          new AbortController().signal,
+        ),
+      ),
     ).rejects.toThrow(/does not support tool calling/);
   });
 
   it('records every tool-surfaced region in the evidence ledger and renders [n] blocks back to the model', async () => {
     const provider = new ScriptedChatProvider((step) =>
       step === 0
-        ? [{ type: 'tool_call', id: 'call-1', name: 'search_code', args: { query: 'x' } }, { type: 'done', stopReason: 'tool_use' }]
-        : [{ type: 'text', delta: 'Done.' }, { type: 'done', stopReason: 'stop' }],
+        ? [
+            {
+              type: 'tool_call',
+              id: 'call-1',
+              name: 'search_code',
+              args: { query: 'x' },
+            },
+            { type: 'done', stopReason: 'tool_use' },
+          ]
+        : [
+            { type: 'text', delta: 'Done.' },
+            { type: 'done', stopReason: 'stop' },
+          ],
     );
     class TwoRegionToolExecutor implements ToolExecutor {
-      readonly definitions: ToolDefinition[] = [{ name: 'search_code', description: 'test', parameters: {} }];
+      readonly definitions: ToolDefinition[] = [
+        { name: 'search_code', description: 'test', parameters: {} },
+      ];
       async execute(): Promise<ToolExecutionResult> {
         return {
           regions: [
@@ -178,7 +278,14 @@ describe('runAgentLoop', () => {
     }
 
     const events = await drain(
-      runAgentLoop(provider, new TwoRegionToolExecutor(), 'proj-1', 'system', 'question', new AbortController().signal),
+      runAgentLoop(
+        provider,
+        new TwoRegionToolExecutor(),
+        'proj-1',
+        'system',
+        'question',
+        new AbortController().signal,
+      ),
     );
 
     const done = events.at(-1) as { evidence: unknown };
@@ -190,23 +297,45 @@ describe('runAgentLoop', () => {
     // The next model call must see the rendered [n] blocks, not raw unmarkered content.
     const secondRequest = provider.receivedRequests[1]!;
     const toolTurn = secondRequest.priorTurns?.find((t) => t.role === 'tool');
-    expect(toolTurn && 'results' in toolTurn ? toolTurn.results[0]?.content : undefined).toContain(
-      '[1] src/a.ts:1-3',
-    );
-    expect(toolTurn && 'results' in toolTurn ? toolTurn.results[0]?.content : undefined).toContain(
-      '[2] src/b.ts:5-7',
-    );
+    expect(
+      toolTurn && 'results' in toolTurn
+        ? toolTurn.results[0]?.content
+        : undefined,
+    ).toContain('[1] src/a.ts:1-3');
+    expect(
+      toolTurn && 'results' in toolTurn
+        ? toolTurn.results[0]?.content
+        : undefined,
+    ).toContain('[2] src/b.ts:5-7');
   });
 
   it('keeps markers sequential across multiple steps, not reset per tool call', async () => {
     const provider = new ScriptedChatProvider((step) =>
       step < 2
-        ? [{ type: 'tool_call', id: `call-${step}`, name: 'search_code', args: {} }, { type: 'done', stopReason: 'tool_use' }]
-        : [{ type: 'text', delta: 'Done.' }, { type: 'done', stopReason: 'stop' }],
+        ? [
+            {
+              type: 'tool_call',
+              id: `call-${step}`,
+              name: 'search_code',
+              args: {},
+            },
+            { type: 'done', stopReason: 'tool_use' },
+          ]
+        : [
+            { type: 'text', delta: 'Done.' },
+            { type: 'done', stopReason: 'stop' },
+          ],
     );
 
     const events = await drain(
-      runAgentLoop(provider, new RegionToolExecutor(), 'proj-1', 'system', 'question', new AbortController().signal),
+      runAgentLoop(
+        provider,
+        new RegionToolExecutor(),
+        'proj-1',
+        'system',
+        'question',
+        new AbortController().signal,
+      ),
     );
 
     const done = events.at(-1) as { evidence: { marker: number }[] };

@@ -6,7 +6,12 @@ import { CHAT_PROVIDER_TOKEN } from '../llm/llm.module';
 import type { ChatProvider } from '../llm/chat-provider.interface';
 import { parseCitations } from '../common/citation-parser';
 import { rankFiles, type RankableFile } from './file-ranking';
-import { buildTourMapPrompt, buildTourReducePrompt, parseTourSections, type MarkedEvidence } from './tour-prompts';
+import {
+  buildTourMapPrompt,
+  buildTourReducePrompt,
+  parseTourSections,
+  type MarkedEvidence,
+} from './tour-prompts';
 import type { TourStatus } from '../contracts';
 
 const TOP_N_FILES = 30;
@@ -39,18 +44,27 @@ export class TourService {
    * lands ('ready') or an attempt for this revision finished producing nothing
    * ('absent') — the latter stops the poll instead of re-triggering forever.
    */
-  async getTourStatus(projectId: string): Promise<{ tour: TourRecord | null; status: TourStatus }> {
+  async getTourStatus(
+    projectId: string,
+  ): Promise<{ tour: TourRecord | null; status: TourStatus }> {
     const project = await this.projectsRepository.findById(projectId);
     if (!project) return { tour: null, status: 'absent' };
     const tour = project.tour ?? null;
 
-    if (tour && project.headRevision && tour.revision === project.headRevision) {
+    if (
+      tour &&
+      project.headRevision &&
+      tour.revision === project.headRevision
+    ) {
       return { tour, status: 'ready' };
     }
     if (this.inFlight.has(projectId)) return { tour, status: 'generating' };
 
     const canGenerate = project.status === 'ready' && !!project.headRevision;
-    if (canGenerate && this.attemptedRevision.get(projectId) !== project.headRevision) {
+    if (
+      canGenerate &&
+      this.attemptedRevision.get(projectId) !== project.headRevision
+    ) {
       this.ensureGenerating(projectId, project.headRevision!);
       return { tour, status: 'generating' };
     }
@@ -61,7 +75,11 @@ export class TourService {
     if (this.inFlight.has(projectId)) return;
     this.inFlight.add(projectId);
     this.generate(projectId)
-      .catch((err) => this.logger.error(`Tour generation failed for project ${projectId}: ${String(err)}`))
+      .catch((err) =>
+        this.logger.error(
+          `Tour generation failed for project ${projectId}: ${String(err)}`,
+        ),
+      )
       .finally(() => {
         this.inFlight.delete(projectId);
         // Mark the attempt so a still-tourless GET reports 'absent', not another
@@ -80,10 +98,14 @@ export class TourService {
     // unchanged re-index or from a failed re-index of an already-ready project.
     if (!force && project.tour?.revision === project.headRevision) return;
 
-    const firstChunks = await this.chunksRepository.findFirstChunkPerFile(projectId);
+    const firstChunks =
+      await this.chunksRepository.findFirstChunkPerFile(projectId);
     if (firstChunks.length === 0) return;
 
-    const rankable: RankableFile[] = firstChunks.map((c) => ({ path: c.path, content: c.content }));
+    const rankable: RankableFile[] = firstChunks.map((c) => ({
+      path: c.path,
+      content: c.content,
+    }));
     const ranked = rankFiles(rankable, TOP_N_FILES);
 
     const byPath = new Map(firstChunks.map((c) => [c.path, c]));
@@ -93,7 +115,12 @@ export class TourService {
         if (!chunk) return null;
         return {
           marker: i + 1,
-          block: { path, startLine: chunk.startLine, endLine: chunk.endLine, content: chunk.content },
+          block: {
+            path,
+            startLine: chunk.startLine,
+            endLine: chunk.endLine,
+            content: chunk.content,
+          },
         };
       })
       .filter((e): e is MarkedEvidence => e !== null);
@@ -102,13 +129,21 @@ export class TourService {
     for (let i = 0; i < evidence.length; i += MAP_BATCH_SIZE) {
       const batch = evidence.slice(i, i + MAP_BATCH_SIZE);
       const { system, user } = buildTourMapPrompt(batch);
-      const result = await this.chatProvider.complete({ system, user, maxTokens: TOUR_MAX_TOKENS });
+      const result = await this.chatProvider.complete({
+        system,
+        user,
+        maxTokens: TOUR_MAX_TOKENS,
+      });
       groupSummaries.push(result.text.trim());
     }
     if (groupSummaries.length === 0) return;
 
     const { system, user } = buildTourReducePrompt(groupSummaries);
-    const reduced = await this.chatProvider.complete({ system, user, maxTokens: TOUR_MAX_TOKENS });
+    const reduced = await this.chatProvider.complete({
+      system,
+      user,
+      maxTokens: TOUR_MAX_TOKENS,
+    });
 
     const evidenceBlocks = evidence.map((e) => e.block);
     const sections = parseTourSections(reduced.text).map((section) => ({

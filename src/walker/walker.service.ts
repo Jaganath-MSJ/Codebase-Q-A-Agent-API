@@ -27,7 +27,8 @@ export interface WalkedFile {
   lines: string[];
 }
 
-export type SkipReason = 'gitignore' | 'filename' | 'extension' | 'too-large' | 'binary' | 'minified';
+export type SkipReason =
+  'gitignore' | 'filename' | 'extension' | 'too-large' | 'binary' | 'minified';
 
 export interface WalkResult {
   included: WalkedFile[];
@@ -54,11 +55,19 @@ type ClassifyResult =
 export class WalkerService {
   async walk(rootDir: string): Promise<WalkResult> {
     const [entries, gitignoreEntries] = await Promise.all([
-      fg('**/*', { cwd: rootDir, dot: true, onlyFiles: true, ignore: DENYLIST_GLOBS }),
+      fg('**/*', {
+        cwd: rootDir,
+        dot: true,
+        onlyFiles: true,
+        ignore: DENYLIST_GLOBS,
+      }),
       fg('**/.gitignore', { cwd: rootDir, dot: true, ignore: DENYLIST_GLOBS }),
     ]);
 
-    const gitignoreFilter = await loadGitignoreFilter(rootDir, gitignoreEntries);
+    const gitignoreFilter = await loadGitignoreFilter(
+      rootDir,
+      gitignoreEntries,
+    );
 
     // Classify entries concurrently (the stat/read/binary-sniff I/O is the walk's
     // cost), then aggregate sequentially so skipReasons totals and the included
@@ -71,13 +80,17 @@ export class WalkerService {
       // edge case (e.g. a directory name fast-glob's matcher treats
       // differently than a plain prefix check would).
       if (isDenylisted(relPath)) return { kind: 'skip-silent' };
-      if (gitignoreFilter.isIgnored(relPath)) return { kind: 'skip', reason: 'gitignore' };
-      if (isFilenameDenylisted(relPath)) return { kind: 'skip', reason: 'filename' };
-      if (classifyExtension(relPath) === 'denied') return { kind: 'skip', reason: 'extension' };
+      if (gitignoreFilter.isIgnored(relPath))
+        return { kind: 'skip', reason: 'gitignore' };
+      if (isFilenameDenylisted(relPath))
+        return { kind: 'skip', reason: 'filename' };
+      if (classifyExtension(relPath) === 'denied')
+        return { kind: 'skip', reason: 'extension' };
 
       const absPath = path.join(rootDir, entry);
       const stats = await stat(absPath);
-      if (stats.size > MAX_FILE_BYTES) return { kind: 'skip', reason: 'too-large' };
+      if (stats.size > MAX_FILE_BYTES)
+        return { kind: 'skip', reason: 'too-large' };
 
       // One read: the raw buffer feeds the byte-level binary sniff; its utf8
       // decode feeds the minified check and read-file.ts's normalization.
@@ -85,21 +98,29 @@ export class WalkerService {
       if (await isBinaryFile(buf)) return { kind: 'skip', reason: 'binary' };
 
       const raw = buf.toString('utf8');
-      if (hasExcessiveLineLength(raw)) return { kind: 'skip', reason: 'minified' };
+      if (hasExcessiveLineLength(raw))
+        return { kind: 'skip', reason: 'minified' };
 
       const { text, lines } = toLines(raw);
       return { kind: 'include', file: { relPath, absPath, text, lines } };
     };
 
-    const results = await mapWithConcurrency(entries, WALK_CONCURRENCY, classify);
+    const results = await mapWithConcurrency(
+      entries,
+      WALK_CONCURRENCY,
+      classify,
+    );
 
     const included: WalkedFile[] = [];
     const skipReasons: Partial<Record<SkipReason, number>> = {};
     for (const result of results) {
       if (result.kind === 'include') included.push(result.file);
-      else if (result.kind === 'skip') skipReasons[result.reason] = (skipReasons[result.reason] ?? 0) + 1;
+      else if (result.kind === 'skip')
+        skipReasons[result.reason] = (skipReasons[result.reason] ?? 0) + 1;
     }
-    included.sort((a, b) => (a.relPath < b.relPath ? -1 : a.relPath > b.relPath ? 1 : 0));
+    included.sort((a, b) =>
+      a.relPath < b.relPath ? -1 : a.relPath > b.relPath ? 1 : 0,
+    );
 
     return { included, skipReasons };
   }

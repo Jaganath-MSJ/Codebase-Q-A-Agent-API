@@ -8,7 +8,13 @@ import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
 
 @Module({
-  imports: [JobsModule, TourModule, ChangeAnalysisModule, IndexingModule, CredentialsModule],
+  imports: [
+    JobsModule,
+    TourModule,
+    ChangeAnalysisModule,
+    IndexingModule,
+    CredentialsModule,
+  ],
   controllers: [ProjectsController],
   providers: [ProjectsService],
 })

@@ -49,21 +49,31 @@ export class ChangeAnalysisService {
    * attempt is in flight, 'ready' once a fresh one lands, 'absent' once an
    * attempt for this revision finished producing nothing.
    */
-  async getAnalysisStatus(
-    projectId: string,
-  ): Promise<{ analysis: ChangeAnalysisRecord | null; status: ChangeAnalysisStatus }> {
+  async getAnalysisStatus(projectId: string): Promise<{
+    analysis: ChangeAnalysisRecord | null;
+    status: ChangeAnalysisStatus;
+  }> {
     const project = await this.projectsRepository.findById(projectId);
     if (!project) return { analysis: null, status: 'absent' };
     const analysis = project.changeAnalysis ?? null;
 
-    if (analysis && project.headRevision && analysis.revision === project.headRevision) {
+    if (
+      analysis &&
+      project.headRevision &&
+      analysis.revision === project.headRevision
+    ) {
       return { analysis, status: 'ready' };
     }
     if (this.inFlight.has(projectId)) return { analysis, status: 'generating' };
 
-    const isGit = project.sourceKind === 'git_url' || project.sourceKind === 'git_private';
-    const canGenerate = isGit && project.status === 'ready' && !!project.headRevision;
-    if (canGenerate && this.attemptedRevision.get(projectId) !== project.headRevision) {
+    const isGit =
+      project.sourceKind === 'git_url' || project.sourceKind === 'git_private';
+    const canGenerate =
+      isGit && project.status === 'ready' && !!project.headRevision;
+    if (
+      canGenerate &&
+      this.attemptedRevision.get(projectId) !== project.headRevision
+    ) {
       this.ensureGenerating(projectId, project.headRevision!);
       return { analysis, status: 'generating' };
     }
@@ -74,7 +84,11 @@ export class ChangeAnalysisService {
     if (this.inFlight.has(projectId)) return;
     this.inFlight.add(projectId);
     this.generate(projectId)
-      .catch((err) => this.logger.error(`Change analysis failed for project ${projectId}: ${String(err)}`))
+      .catch((err) =>
+        this.logger.error(
+          `Change analysis failed for project ${projectId}: ${String(err)}`,
+        ),
+      )
       .finally(() => {
         this.inFlight.delete(projectId);
         this.attemptedRevision.set(projectId, revision);
@@ -88,14 +102,21 @@ export class ChangeAnalysisService {
     // just a folder (no guaranteed .git) and zip_upload is an extracted
     // archive; both are handled the same way Conversation export's GitHub
     // permalinks were: gated out entirely, not given a degraded fallback.
-    if (project.sourceKind !== 'git_url' && project.sourceKind !== 'git_private') return;
-    if (!force && project.changeAnalysis?.revision === project.headRevision) return;
+    if (
+      project.sourceKind !== 'git_url' &&
+      project.sourceKind !== 'git_private'
+    )
+      return;
+    if (!force && project.changeAnalysis?.revision === project.headRevision)
+      return;
     if (!project.workspacePath) return;
 
     const commit = await lastCommitDiff(project.workspacePath);
     if (!commit) return; // no prior commit to diff against yet
 
-    const changedFiles = commit.files.filter((f) => !f.binary).slice(0, MAX_FILES);
+    const changedFiles = commit.files
+      .filter((f) => !f.binary)
+      .slice(0, MAX_FILES);
     if (changedFiles.length === 0) return;
 
     const diffs: ChangedFileDiff[] = changedFiles.map((f) => ({
@@ -124,15 +145,28 @@ export class ChangeAnalysisService {
     for (const file of changedFiles) {
       const chunks = chunksByPath.get(file.path) ?? [];
       for (const chunk of chunks) {
-        addEvidence({ path: file.path, startLine: chunk.startLine, endLine: chunk.endLine, content: chunk.content });
+        addEvidence({
+          path: file.path,
+          startLine: chunk.startLine,
+          endLine: chunk.endLine,
+          content: chunk.content,
+        });
       }
 
       const symbol = chunks[0]?.symbol;
       if (!symbol) continue;
-      const callers = await this.retrievalService.findReferences(projectId, symbol);
+      const callers = await this.retrievalService.findReferences(
+        projectId,
+        symbol,
+      );
       for (const caller of callers.slice(0, MAX_CALLERS_PER_FILE)) {
         if (caller.path === file.path) continue; // the file's own chunks are already included above
-        addEvidence({ path: caller.path, startLine: caller.startLine, endLine: caller.endLine, content: caller.content });
+        addEvidence({
+          path: caller.path,
+          startLine: caller.startLine,
+          endLine: caller.endLine,
+          content: caller.content,
+        });
       }
     }
 

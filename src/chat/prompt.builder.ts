@@ -38,13 +38,18 @@ export const AGENTIC_SYSTEM_PROMPT = [
 ].join(' ');
 
 function formatExchanges(exchanges: RecentExchange[]): string {
-  return exchanges.map((ex) => `Q: ${ex.question}\nA: ${ex.answer}`).join('\n\n');
+  return exchanges
+    .map((ex) => `Q: ${ex.question}\nA: ${ex.answer}`)
+    .join('\n\n');
 }
 
 /** The exact `[n] path:start-end\ncontent` shape the model is shown — shared with evals/judge.ts so the judge grades against what the model actually saw, not a lookalike. */
 export function formatEvidenceBlock(evidence: EvidenceBlock[]): string {
   return evidence
-    .map((block, i) => `[${i + 1}] ${block.path}:${block.startLine}-${block.endLine}\n${block.content}`)
+    .map(
+      (block, i) =>
+        `[${i + 1}] ${block.path}:${block.startLine}-${block.endLine}\n${block.content}`,
+    )
     .join('\n\n');
 }
 

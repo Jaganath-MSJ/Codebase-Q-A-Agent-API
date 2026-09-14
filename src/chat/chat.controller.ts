@@ -1,7 +1,21 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Res,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
-import { ChatService, type ChatSseEvent, type MessageWithCitations } from './chat.service';
+import {
+  ChatService,
+  type ChatSseEvent,
+  type MessageWithCitations,
+} from './chat.service';
 import { classifyMode } from './mode-router';
 import { ConversationProjectsRepository } from '../db/repositories/conversation-projects.repository';
 import {
@@ -13,7 +27,10 @@ import {
 } from '../contracts';
 import type { ConversationRow, CitationRow } from '../db/schema';
 
-export function toConversationDto(row: ConversationRow, projectIds?: string[]): ConversationDto {
+export function toConversationDto(
+  row: ConversationRow,
+  projectIds?: string[],
+): ConversationDto {
   return {
     id: row.id,
     projectId: row.projectId,
@@ -73,7 +90,9 @@ export class ChatController {
   @Post('projects/:projectId/conversations')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreatedResponse({ type: ConversationDto })
-  async createConversation(@Param('projectId', ParseUUIDPipe) projectId: string): Promise<ConversationDto> {
+  async createConversation(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+  ): Promise<ConversationDto> {
     const row = await this.chatService.createConversation(projectId);
     return toConversationDto(row);
   }
@@ -82,24 +101,35 @@ export class ChatController {
   @Post('conversations/multi')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreatedResponse({ type: ConversationDto })
-  async createMultiConversation(@Body() dto: CreateMultiConversationDto): Promise<ConversationDto> {
-    const row = await this.chatService.createMultiProjectConversation(dto.projectIds);
+  async createMultiConversation(
+    @Body() dto: CreateMultiConversationDto,
+  ): Promise<ConversationDto> {
+    const row = await this.chatService.createMultiProjectConversation(
+      dto.projectIds,
+    );
     return toConversationDto(row, dto.projectIds);
   }
 
   @Get('projects/:projectId/conversations')
   @ApiOkResponse({ type: ConversationDto, isArray: true })
-  async listConversations(@Param('projectId', ParseUUIDPipe) projectId: string): Promise<ConversationDto[]> {
+  async listConversations(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+  ): Promise<ConversationDto[]> {
     const rows = await this.chatService.listConversations(projectId);
-    const projectIdsByConversation = await this.conversationProjectsRepository.findProjectIdsForConversations(
-      rows.map((r) => r.id),
+    const projectIdsByConversation =
+      await this.conversationProjectsRepository.findProjectIdsForConversations(
+        rows.map((r) => r.id),
+      );
+    return rows.map((row) =>
+      toConversationDto(row, projectIdsByConversation.get(row.id)),
     );
-    return rows.map((row) => toConversationDto(row, projectIdsByConversation.get(row.id)));
   }
 
   @Get('conversations/:id/messages')
   @ApiOkResponse({ type: MessageDto, isArray: true })
-  async listMessages(@Param('id', ParseUUIDPipe) id: string): Promise<MessageDto[]> {
+  async listMessages(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<MessageDto[]> {
     const rows = await this.chatService.listMessages(id);
     return rows.map(toMessageDto);
   }
@@ -110,9 +140,15 @@ export class ChatController {
    * body) is what matters here, same pattern as the SSE endpoint above.
    */
   @Get('conversations/:id/export')
-  @ApiOkResponse({ description: 'text/markdown attachment of the full conversation transcript' })
-  async exportConversation(@Param('id', ParseUUIDPipe) id: string, @Res() res: Response): Promise<void> {
-    const { title, markdown } = await this.chatService.exportConversationMarkdown(id);
+  @ApiOkResponse({
+    description: 'text/markdown attachment of the full conversation transcript',
+  })
+  async exportConversation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { title, markdown } =
+      await this.chatService.exportConversationMarkdown(id);
     const filename = `conversation-${slugify(title) ?? id}.md`;
 
     res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
@@ -137,7 +173,8 @@ export class ChatController {
    */
   @Post('conversations/:id/messages')
   @ApiOkResponse({
-    description: 'text/event-stream: message_created, status, sources, token, done, error',
+    description:
+      'text/event-stream: message_created, status, sources, token, done, error',
   })
   async postMessage(
     @Param('id', ParseUUIDPipe) id: string,
@@ -148,15 +185,27 @@ export class ChatController {
     res.on('close', () => abortController.abort());
 
     const requestedMode = dto.mode ?? 'auto';
-    let resolvedMode = requestedMode === 'auto' ? classifyMode(dto.question) : requestedMode;
-    if (resolvedMode === 'thorough' && (await this.chatService.isMultiProject(id))) {
+    let resolvedMode =
+      requestedMode === 'auto' ? classifyMode(dto.question) : requestedMode;
+    if (
+      resolvedMode === 'thorough' &&
+      (await this.chatService.isMultiProject(id))
+    ) {
       resolvedMode = 'fast';
     }
 
     const events =
       resolvedMode === 'thorough'
-        ? this.chatService.streamAgenticMessage(id, dto.question, abortController.signal)
-        : this.chatService.streamMessage(id, dto.question, abortController.signal);
+        ? this.chatService.streamAgenticMessage(
+            id,
+            dto.question,
+            abortController.signal,
+          )
+        : this.chatService.streamMessage(
+            id,
+            dto.question,
+            abortController.signal,
+          );
     const first = await events.next();
 
     res.writeHead(HttpStatus.OK, {
@@ -168,7 +217,9 @@ export class ChatController {
     res.flushHeaders();
 
     const write = (event: { type: string; data: unknown }) => {
-      res.write(`event: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`);
+      res.write(
+        `event: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`,
+      );
     };
 
     // Tags the very first event with what the router actually decided, so

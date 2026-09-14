@@ -20,16 +20,26 @@ export interface ContentTreeEntry {
 export function hashContentTree(entries: ContentTreeEntry[]): string {
   const sorted = [...entries].sort((a, b) => a.path.localeCompare(b.path));
   const hash = createHash('sha256');
-  for (const entry of sorted) hash.update(`${entry.path}:${entry.contentHash}\n`);
+  for (const entry of sorted)
+    hash.update(`${entry.path}:${entry.contentHash}\n`);
   return hash.digest('hex');
 }
 
-export async function hashWorkspaceContentTree(workspacePath: string): Promise<string> {
-  const relPaths = await fg('**/*', { cwd: workspacePath, dot: true, onlyFiles: true });
+export async function hashWorkspaceContentTree(
+  workspacePath: string,
+): Promise<string> {
+  const relPaths = await fg('**/*', {
+    cwd: workspacePath,
+    dot: true,
+    onlyFiles: true,
+  });
   const entries = await Promise.all(
     relPaths.map(async (relPath): Promise<ContentTreeEntry> => {
       const buf = await readFile(path.join(workspacePath, relPath));
-      return { path: toPosix(relPath), contentHash: createHash('sha256').update(buf).digest('hex') };
+      return {
+        path: toPosix(relPath),
+        contentHash: createHash('sha256').update(buf).digest('hex'),
+      };
     }),
   );
   return hashContentTree(entries);

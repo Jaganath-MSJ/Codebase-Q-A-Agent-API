@@ -28,7 +28,10 @@ export const CHAT_PROVIDER_TOKEN = Symbol('CHAT_PROVIDER');
         const secondary = config.chatProvider === 'groq' ? gemini : groq;
         const inner = new FailoverChatProvider(primary, secondary);
         if (!config.llmCacheEnabled) return inner;
-        return new CachingChatProvider(inner, path.join(config.dataDir, 'cache', 'llm'));
+        return new CachingChatProvider(
+          inner,
+          path.join(config.dataDir, 'cache', 'llm'),
+        );
       },
     },
   ],

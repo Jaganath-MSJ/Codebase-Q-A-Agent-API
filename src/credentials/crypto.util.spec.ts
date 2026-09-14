@@ -7,7 +7,9 @@ describe('encrypt / decrypt', () => {
 
   it('round-trips a plaintext token', () => {
     const payload = encrypt('ghp_abcdefghijklmnopqrstuvwxyz0123456789', key);
-    expect(decrypt(payload, key)).toBe('ghp_abcdefghijklmnopqrstuvwxyz0123456789');
+    expect(decrypt(payload, key)).toBe(
+      'ghp_abcdefghijklmnopqrstuvwxyz0123456789',
+    );
   });
 
   it('uses a fresh random IV every call, even for identical plaintext', () => {

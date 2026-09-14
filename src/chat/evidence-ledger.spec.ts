@@ -3,15 +3,21 @@ import { formatEvidenceEntry, recordEvidence } from './evidence-ledger';
 
 describe('recordEvidence', () => {
   it('assigns 1-based markers starting from an empty ledger', () => {
-    const created = recordEvidence([], [
-      { path: 'src/a.ts', startLine: 1, endLine: 5, content: 'a' },
-      { path: 'src/b.ts', startLine: 10, endLine: 12, content: 'b' },
-    ]);
+    const created = recordEvidence(
+      [],
+      [
+        { path: 'src/a.ts', startLine: 1, endLine: 5, content: 'a' },
+        { path: 'src/b.ts', startLine: 10, endLine: 12, content: 'b' },
+      ],
+    );
     expect(created.map((e) => e.marker)).toEqual([1, 2]);
   });
 
   it('continues numbering from however many entries already exist', () => {
-    const existing = recordEvidence([], [{ path: 'src/a.ts', startLine: 1, endLine: 5, content: 'a' }]);
+    const existing = recordEvidence(
+      [],
+      [{ path: 'src/a.ts', startLine: 1, endLine: 5, content: 'a' }],
+    );
     const created = recordEvidence(existing, [
       { path: 'src/b.ts', startLine: 10, endLine: 12, content: 'b' },
       { path: 'src/c.ts', startLine: 20, endLine: 22, content: 'c' },
@@ -20,13 +26,32 @@ describe('recordEvidence', () => {
   });
 
   it('returns an empty array for an empty region list, without touching numbering', () => {
-    const existing = recordEvidence([], [{ path: 'src/a.ts', startLine: 1, endLine: 5, content: 'a' }]);
+    const existing = recordEvidence(
+      [],
+      [{ path: 'src/a.ts', startLine: 1, endLine: 5, content: 'a' }],
+    );
     expect(recordEvidence(existing, [])).toEqual([]);
   });
 
   it('preserves region fields verbatim alongside the assigned marker', () => {
-    const [entry] = recordEvidence([], [{ path: 'src/auth.service.ts', startLine: 41, endLine: 88, content: 'code' }]);
-    expect(entry).toEqual({ path: 'src/auth.service.ts', startLine: 41, endLine: 88, content: 'code', marker: 1 });
+    const [entry] = recordEvidence(
+      [],
+      [
+        {
+          path: 'src/auth.service.ts',
+          startLine: 41,
+          endLine: 88,
+          content: 'code',
+        },
+      ],
+    );
+    expect(entry).toEqual({
+      path: 'src/auth.service.ts',
+      startLine: 41,
+      endLine: 88,
+      content: 'code',
+      marker: 1,
+    });
   });
 });
 

@@ -41,7 +41,9 @@ describe('buildCitationLink', () => {
   });
 
   it('returns null when headRevision is missing, even for a git_url project', () => {
-    expect(buildCitationLink({ ...githubProject, headRevision: null }, citation)).toBeNull();
+    expect(
+      buildCitationLink({ ...githubProject, headRevision: null }, citation),
+    ).toBeNull();
   });
 });
 
@@ -67,8 +69,11 @@ describe('renderAnswerMarkdown', () => {
   });
 
   it('falls back to a plain marker (no link) when the project has no resolvable remote', () => {
-    const localLinkFor = (c: ExportCitation) => buildCitationLink(localProject, c);
-    expect(renderAnswerMarkdown('Auth lives in [1].', citations, localLinkFor)).toBe('Auth lives in [1].');
+    const localLinkFor = (c: ExportCitation) =>
+      buildCitationLink(localProject, c);
+    expect(
+      renderAnswerMarkdown('Auth lives in [1].', citations, localLinkFor),
+    ).toBe('Auth lives in [1].');
   });
 });
 
@@ -84,7 +89,13 @@ describe('buildConversationMarkdown', () => {
           content: 'Auth lives in [1].',
           citations: [
             citation,
-            { marker: 2, filePath: 'src/unused.ts', startLine: 1, endLine: 5, used: false },
+            {
+              marker: 2,
+              filePath: 'src/unused.ts',
+              startLine: 1,
+              endLine: 5,
+              used: false,
+            },
           ],
         },
       ],
@@ -111,7 +122,11 @@ describe('buildConversationMarkdown', () => {
   });
 
   it('falls back to "Conversation" when the title is null', () => {
-    const markdown = buildConversationMarkdown({ conversationTitle: null, project: githubProject, messages: [] });
+    const markdown = buildConversationMarkdown({
+      conversationTitle: null,
+      project: githubProject,
+      messages: [],
+    });
     expect(markdown.startsWith('# Conversation\n')).toBe(true);
   });
 });

@@ -46,7 +46,10 @@ describe('countInboundImports', () => {
 
   it('resolves a parent-directory import to an index file', () => {
     const files: RankableFile[] = [
-      { path: 'src/chat/chat.service.ts', content: `import { db } from '../db';` },
+      {
+        path: 'src/chat/chat.service.ts',
+        content: `import { db } from '../db';`,
+      },
       { path: 'src/db/index.ts', content: 'export const db = {};' },
     ];
     expect(countInboundImports(files).get('src/db/index.ts')).toBe(1);
@@ -54,7 +57,10 @@ describe('countInboundImports', () => {
 
   it('ignores bare package imports and unresolvable specifiers', () => {
     const files: RankableFile[] = [
-      { path: 'src/index.ts', content: `import { z } from 'zod';\nimport x from './missing';` },
+      {
+        path: 'src/index.ts',
+        content: `import { z } from 'zod';\nimport x from './missing';`,
+      },
     ];
     expect(countInboundImports(files).size).toBe(0);
   });
@@ -98,7 +104,9 @@ describe('rankFiles', () => {
     const ranked = rankFiles(files, 4);
     expect(ranked[0]).toBe('src/main.ts');
     expect(ranked).not.toContain(undefined);
-    expect(ranked.indexOf('src/leaf.ts')).toBeGreaterThan(ranked.indexOf('src/widely-used.ts'));
+    expect(ranked.indexOf('src/leaf.ts')).toBeGreaterThan(
+      ranked.indexOf('src/widely-used.ts'),
+    );
   });
 
   it('respects the limit', () => {

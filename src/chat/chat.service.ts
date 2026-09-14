@@ -1,4 +1,10 @@
-import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { RetrievalService } from '../retrieval/retrieval.service';
 import type { ScoredChunk } from '../retrieval/vector.retriever';
 import { reciprocalRankFusion, type RankedList } from '../retrieval/rrf';
@@ -7,7 +13,12 @@ import { ConversationsRepository } from '../db/repositories/conversations.reposi
 import { ConversationProjectsRepository } from '../db/repositories/conversation-projects.repository';
 import { MessagesRepository } from '../db/repositories/messages.repository';
 import { CitationsRepository } from '../db/repositories/citations.repository';
-import type { ConversationRow, MessageRow, CitationRow, NewCitationRow } from '../db/schema';
+import type {
+  ConversationRow,
+  MessageRow,
+  CitationRow,
+  NewCitationRow,
+} from '../db/schema';
 import { CHAT_PROVIDER_TOKEN } from '../llm/llm.module';
 import type { ChatProvider, ChatUsage } from '../llm/chat-provider.interface';
 import {
@@ -20,8 +31,18 @@ import {
 } from './prompt.builder';
 import { parseCitations, type Citation } from '../common/citation-parser';
 import { redactSecrets } from '../common/redact';
-import { buildConversationMarkdown, type ExportCitation, type ExportMessage } from '../common/conversation-markdown';
-import { evictedExchanges, recentWindow, toExchanges, truncateAnswer, type Exchange } from './conversation-context';
+import {
+  buildConversationMarkdown,
+  type ExportCitation,
+  type ExportMessage,
+} from '../common/conversation-markdown';
+import {
+  evictedExchanges,
+  recentWindow,
+  toExchanges,
+  truncateAnswer,
+  type Exchange,
+} from './conversation-context';
 import { runAgentLoop } from './agent.loop';
 import type { EvidenceEntry } from './evidence-ledger';
 import { ToolRegistry } from '../tools/tool.registry';
@@ -64,15 +85,27 @@ export interface MessageWithCitations extends MessageRow {
 export type ChatSseEvent =
   | {
       type: 'message_created';
-      data: { userMessageId: string; assistantMessageId: string; resolvedMode?: 'fast' | 'thorough' };
+      data: {
+        userMessageId: string;
+        assistantMessageId: string;
+        resolvedMode?: 'fast' | 'thorough';
+      };
     }
-  | { type: 'status'; data: { stage: 'condensing' | 'retrieving' | 'generating' } }
+  | {
+      type: 'status';
+      data: { stage: 'condensing' | 'retrieving' | 'generating' };
+    }
   | { type: 'sources'; data: { sources: SourceRef[] } }
   | { type: 'token'; data: { delta: string } }
   | { type: 'tool'; data: { name: string; args: unknown } }
   | {
       type: 'done';
-      data: { messageId: string; citations: Citation[]; usage: ChatUsage; latencyMs: number };
+      data: {
+        messageId: string;
+        citations: Citation[];
+        usage: ChatUsage;
+        latencyMs: number;
+      };
     }
   | { type: 'error'; data: { messageId: string; message: string } };
 
@@ -106,23 +139,34 @@ export class ChatService {
    * export) keeps behaving sensibly without needing to know this
    * conversation is unusual.
    */
-  async createMultiProjectConversation(projectIds: string[]): Promise<ConversationRow> {
+  async createMultiProjectConversation(
+    projectIds: string[],
+  ): Promise<ConversationRow> {
     const distinctIds = [...new Set(projectIds)];
     if (distinctIds.length < 2) {
-      throw new BadRequestException('A multi-project conversation needs at least 2 distinct project ids');
+      throw new BadRequestException(
+        'A multi-project conversation needs at least 2 distinct project ids',
+      );
     }
 
-    const projects = await Promise.all(distinctIds.map((id) => this.projectsRepository.findById(id)));
+    const projects = await Promise.all(
+      distinctIds.map((id) => this.projectsRepository.findById(id)),
+    );
     const missing = distinctIds.filter((_, i) => !projects[i]);
     if (missing.length > 0) {
-      throw new NotFoundException(`Project(s) not found: ${missing.join(', ')}`);
+      throw new NotFoundException(
+        `Project(s) not found: ${missing.join(', ')}`,
+      );
     }
 
     const conversation = await this.conversationsRepository.create({
       projectId: distinctIds[0]!,
       title: null,
     });
-    await this.conversationProjectsRepository.addAll(conversation.id, distinctIds);
+    await this.conversationProjectsRepository.addAll(
+      conversation.id,
+      distinctIds,
+    );
     return conversation;
   }
 
@@ -131,15 +175,19 @@ export class ChatService {
   }
 
   async isMultiProject(conversationId: string): Promise<boolean> {
-    const projectIds = await this.conversationProjectsRepository.findProjectIds(conversationId);
+    const projectIds =
+      await this.conversationProjectsRepository.findProjectIds(conversationId);
     return projectIds.length >= 2;
   }
 
   async listMessages(conversationId: string): Promise<MessageWithCitations[]> {
     await this.requireConversation(conversationId);
-    const rows = await this.messagesRepository.findAllByConversation(conversationId);
+    const rows =
+      await this.messagesRepository.findAllByConversation(conversationId);
 
-    const citationRows = await this.citationsRepository.findAllByMessageIds(rows.map((r) => r.id));
+    const citationRows = await this.citationsRepository.findAllByMessageIds(
+      rows.map((r) => r.id),
+    );
     const byMessage = new Map<string, CitationRow[]>();
     for (const citation of citationRows) {
       const list = byMessage.get(citation.messageId);
@@ -147,27 +195,35 @@ export class ChatService {
       else byMessage.set(citation.messageId, [citation]);
     }
 
-    return rows.map((row) => ({ ...row, citations: byMessage.get(row.id) ?? [] }));
+    return rows.map((row) => ({
+      ...row,
+      citations: byMessage.get(row.id) ?? [],
+    }));
   }
 
-  async exportConversationMarkdown(conversationId: string): Promise<{ title: string | null; markdown: string }> {
+  async exportConversationMarkdown(
+    conversationId: string,
+  ): Promise<{ title: string | null; markdown: string }> {
     const conversation = await this.requireConversation(conversationId);
-    const project = await this.projectsRepository.findById(conversation.projectId);
-    if (!project) throw new NotFoundException(`Project ${conversation.projectId} not found`);
+    const project = await this.projectsRepository.findById(
+      conversation.projectId,
+    );
+    if (!project)
+      throw new NotFoundException(
+        `Project ${conversation.projectId} not found`,
+      );
 
     const messages = await this.listMessages(conversationId);
     const exportMessages: ExportMessage[] = messages.map((m) => ({
       role: m.role,
       content: m.content,
-      citations: m.citations.map(
-        (c): ExportCitation => ({
-          marker: c.marker,
-          filePath: c.filePath,
-          startLine: c.startLine,
-          endLine: c.endLine,
-          used: c.used,
-        }),
-      ),
+      citations: m.citations.map((c): ExportCitation => ({
+        marker: c.marker,
+        filePath: c.filePath,
+        startLine: c.startLine,
+        endLine: c.endLine,
+        used: c.used,
+      })),
     }));
 
     const markdown = buildConversationMarkdown({
@@ -199,18 +255,29 @@ export class ChatService {
     signal: AbortSignal,
   ): AsyncGenerator<ChatSseEvent> {
     const conversation = await this.requireConversation(conversationId);
-    const { userMessage, assistantMessage } = await this.messagesRepository.createTurn(
-      conversationId,
-      question,
-    );
+    const { userMessage, assistantMessage } =
+      await this.messagesRepository.createTurn(conversationId, question);
 
     yield {
       type: 'message_created',
-      data: { userMessageId: userMessage.id, assistantMessageId: assistantMessage.id },
+      data: {
+        userMessageId: userMessage.id,
+        assistantMessageId: assistantMessage.id,
+      },
     };
 
-    const priorExchanges = await this.computePriorExchanges(conversationId, conversation.summarizedThroughMsgId);
-    yield* this.generateRagAnswer(conversation, userMessage, assistantMessage, question, priorExchanges, signal);
+    const priorExchanges = await this.computePriorExchanges(
+      conversationId,
+      conversation.summarizedThroughMsgId,
+    );
+    yield* this.generateRagAnswer(
+      conversation,
+      userMessage,
+      assistantMessage,
+      question,
+      priorExchanges,
+      signal,
+    );
   }
 
   /**
@@ -232,14 +299,15 @@ export class ChatService {
     signal: AbortSignal,
   ): AsyncGenerator<ChatSseEvent> {
     const conversation = await this.requireConversation(conversationId);
-    const { userMessage, assistantMessage } = await this.messagesRepository.createTurn(
-      conversationId,
-      question,
-    );
+    const { userMessage, assistantMessage } =
+      await this.messagesRepository.createTurn(conversationId, question);
 
     yield {
       type: 'message_created',
-      data: { userMessageId: userMessage.id, assistantMessageId: assistantMessage.id },
+      data: {
+        userMessageId: userMessage.id,
+        assistantMessageId: assistantMessage.id,
+      },
     };
 
     let buffer = '';
@@ -267,7 +335,10 @@ export class ChatService {
           buffer += event.delta;
           yield { type: 'token', data: { delta: event.delta } };
           if (Date.now() - lastFlushAt >= FLUSH_INTERVAL_MS) {
-            await this.messagesRepository.updateContent(assistantMessage.id, buffer);
+            await this.messagesRepository.updateContent(
+              assistantMessage.id,
+              buffer,
+            );
             lastFlushAt = Date.now();
           }
         } else if (event.type === 'tool_call') {
@@ -282,7 +353,10 @@ export class ChatService {
       }
 
       if (signal.aborted) {
-        await this.messagesRepository.updateContent(assistantMessage.id, buffer);
+        await this.messagesRepository.updateContent(
+          assistantMessage.id,
+          buffer,
+        );
         return;
       }
 
@@ -291,7 +365,10 @@ export class ChatService {
         // exhausted trajectory's own partial text is discarded in favor of a
         // complete RAG answer on the same row — but its `tool_trace` is worth
         // keeping, so `generateRagAnswer` is told about it explicitly.
-        const priorExchanges = await this.computePriorExchanges(conversationId, conversation.summarizedThroughMsgId);
+        const priorExchanges = await this.computePriorExchanges(
+          conversationId,
+          conversation.summarizedThroughMsgId,
+        );
         yield* this.generateRagAnswer(
           conversation,
           userMessage,
@@ -306,7 +383,9 @@ export class ChatService {
 
       const citations = parseCitations(buffer, evidence);
       const latencyMs = Date.now() - startedAt;
-      const { provider, model } = this.splitProviderId(servedBy ?? this.chatProvider.id);
+      const { provider, model } = this.splitProviderId(
+        servedBy ?? this.chatProvider.id,
+      );
 
       await this.messagesRepository.completeAssistant(assistantMessage.id, {
         content: buffer,
@@ -338,11 +417,17 @@ export class ChatService {
       }));
       await this.citationsRepository.insertMany(citationRows);
 
-      yield { type: 'done', data: { messageId: assistantMessage.id, citations, usage, latencyMs } };
+      yield {
+        type: 'done',
+        data: { messageId: assistantMessage.id, citations, usage, latencyMs },
+      };
 
       try {
         if (!conversation.title) {
-          await this.conversationsRepository.setTitle(conversationId, question.slice(0, TITLE_MAX_LENGTH));
+          await this.conversationsRepository.setTitle(
+            conversationId,
+            question.slice(0, TITLE_MAX_LENGTH),
+          );
         }
         await this.conversationsRepository.touch(conversationId);
       } catch {
@@ -350,15 +435,27 @@ export class ChatService {
       }
     } catch (err) {
       if (signal.aborted) {
-        await this.messagesRepository.updateContent(assistantMessage.id, buffer);
+        await this.messagesRepository.updateContent(
+          assistantMessage.id,
+          buffer,
+        );
         return;
       }
       // Redact before it's streamed to the client and persisted (markError) —
       // a provider/git error can echo a credential in its own message text,
       // same hazard WorkerService.recordFailure already guards against.
-      const message = redactSecrets(err instanceof Error ? err.message : 'Unknown error');
-      await this.messagesRepository.markError(assistantMessage.id, buffer, message);
-      yield { type: 'error', data: { messageId: assistantMessage.id, message } };
+      const message = redactSecrets(
+        err instanceof Error ? err.message : 'Unknown error',
+      );
+      await this.messagesRepository.markError(
+        assistantMessage.id,
+        buffer,
+        message,
+      );
+      yield {
+        type: 'error',
+        data: { messageId: assistantMessage.id, message },
+      };
     }
   }
 
@@ -388,17 +485,26 @@ export class ChatService {
       // mismatch" behavior (correct when there's no other project to fall
       // back to). `project` stays null for multi-project — see the
       // `overview` note below.
-      const memberProjectIds = await this.conversationProjectsRepository.findProjectIds(conversation.id);
+      const memberProjectIds =
+        await this.conversationProjectsRepository.findProjectIds(
+          conversation.id,
+        );
       const isMultiProject = memberProjectIds.length >= 2;
-      const project = isMultiProject ? null : await this.projectsRepository.findById(conversation.projectId);
+      const project = isMultiProject
+        ? null
+        : await this.projectsRepository.findById(conversation.projectId);
 
       let retrievalQuery = question;
       if (priorExchanges.length > 0) {
         yield { type: 'status', data: { stage: 'condensing' } };
-        const condensationWindow = recentWindow(priorExchanges, CONDENSATION_WINDOW).map(
-          toPromptExchange,
+        const condensationWindow = recentWindow(
+          priorExchanges,
+          CONDENSATION_WINDOW,
+        ).map(toPromptExchange);
+        const { system, user } = buildCondensationPrompt(
+          condensationWindow,
+          question,
         );
-        const { system, user } = buildCondensationPrompt(condensationWindow, question);
         const condensed = await this.chatProvider.complete(
           { system, user, maxTokens: CONDENSE_MAX_TOKENS },
           signal,
@@ -406,13 +512,25 @@ export class ChatService {
         if (signal.aborted) return;
         if (condensed.text.trim()) retrievalQuery = condensed.text.trim();
       }
-      await this.messagesRepository.setRetrievalQuery(assistantMessage.id, retrievalQuery);
+      await this.messagesRepository.setRetrievalQuery(
+        assistantMessage.id,
+        retrievalQuery,
+      );
 
       yield { type: 'status', data: { stage: 'retrieving' } };
       const scoredChunks: ScoredChunkWithProject[] = isMultiProject
-        ? await this.retrieveAcrossProjects(memberProjectIds, retrievalQuery, TOP_K)
+        ? await this.retrieveAcrossProjects(
+            memberProjectIds,
+            retrievalQuery,
+            TOP_K,
+          )
         : (
-            await this.retrievalService.search(conversation.projectId, retrievalQuery, 'hybrid', TOP_K)
+            await this.retrievalService.search(
+              conversation.projectId,
+              retrievalQuery,
+              'hybrid',
+              TOP_K,
+            )
           ).map((chunk) => ({ ...chunk, projectId: conversation.projectId }));
       if (signal.aborted) return;
 
@@ -449,7 +567,10 @@ export class ChatService {
       // No `overview` for a multi-project conversation — which project's
       // overview would even apply is an open design question (see
       // docs/PROGRESS.md), deliberately deferred rather than guessed at.
-      const generationWindow = recentWindow(priorExchanges, GENERATION_WINDOW).map(toPromptExchange);
+      const generationWindow = recentWindow(
+        priorExchanges,
+        GENERATION_WINDOW,
+      ).map(toPromptExchange);
       const user = buildUserPrompt(evidence, question, {
         overview: project?.overview,
         summary: conversation.summary,
@@ -472,24 +593,35 @@ export class ChatService {
           buffer += event.delta;
           yield { type: 'token', data: { delta: event.delta } };
           if (Date.now() - lastFlushAt >= FLUSH_INTERVAL_MS) {
-            await this.messagesRepository.updateContent(assistantMessage.id, buffer);
+            await this.messagesRepository.updateContent(
+              assistantMessage.id,
+              buffer,
+            );
             lastFlushAt = Date.now();
           }
         } else if (event.type === 'usage') {
-          usage = { inputTokens: event.inputTokens, outputTokens: event.outputTokens };
+          usage = {
+            inputTokens: event.inputTokens,
+            outputTokens: event.outputTokens,
+          };
         } else if (event.type === 'done') {
           servedBy = event.servedBy;
         }
       }
 
       if (signal.aborted) {
-        await this.messagesRepository.updateContent(assistantMessage.id, buffer);
+        await this.messagesRepository.updateContent(
+          assistantMessage.id,
+          buffer,
+        );
         return;
       }
 
       const citations = parseCitations(buffer, evidence);
       const latencyMs = Date.now() - startedAt;
-      const { provider, model } = this.splitProviderId(servedBy ?? this.chatProvider.id);
+      const { provider, model } = this.splitProviderId(
+        servedBy ?? this.chatProvider.id,
+      );
 
       await this.messagesRepository.completeAssistant(assistantMessage.id, {
         content: buffer,
@@ -524,13 +656,19 @@ export class ChatService {
       });
       await this.citationsRepository.insertMany(citationRows);
 
-      yield { type: 'done', data: { messageId: assistantMessage.id, citations, usage, latencyMs } };
+      yield {
+        type: 'done',
+        data: { messageId: assistantMessage.id, citations, usage, latencyMs },
+      };
 
       // Best-effort bookkeeping — the turn above is already durably complete,
       // so a hiccup here must never flip status back to 'error'.
       try {
         if (!conversation.title) {
-          await this.conversationsRepository.setTitle(conversation.id, question.slice(0, TITLE_MAX_LENGTH));
+          await this.conversationsRepository.setTitle(
+            conversation.id,
+            question.slice(0, TITLE_MAX_LENGTH),
+          );
         }
         await this.conversationsRepository.touch(conversation.id);
       } catch {
@@ -563,15 +701,27 @@ export class ChatService {
       }
     } catch (err) {
       if (signal.aborted) {
-        await this.messagesRepository.updateContent(assistantMessage.id, buffer);
+        await this.messagesRepository.updateContent(
+          assistantMessage.id,
+          buffer,
+        );
         return;
       }
       // Redact before it's streamed to the client and persisted (markError) —
       // a provider/git error can echo a credential in its own message text,
       // same hazard WorkerService.recordFailure already guards against.
-      const message = redactSecrets(err instanceof Error ? err.message : 'Unknown error');
-      await this.messagesRepository.markError(assistantMessage.id, buffer, message);
-      yield { type: 'error', data: { messageId: assistantMessage.id, message } };
+      const message = redactSecrets(
+        err instanceof Error ? err.message : 'Unknown error',
+      );
+      await this.messagesRepository.markError(
+        assistantMessage.id,
+        buffer,
+        message,
+      );
+      yield {
+        type: 'error',
+        data: { messageId: assistantMessage.id, message },
+      };
     }
   }
 
@@ -599,7 +749,12 @@ export class ChatService {
         try {
           return {
             projectId,
-            chunks: await this.retrievalService.searchWithQueryVector(projectId, query, queryVector, limit),
+            chunks: await this.retrievalService.searchWithQueryVector(
+              projectId,
+              query,
+              queryVector,
+              limit,
+            ),
           };
         } catch (err) {
           this.logger.warn(
@@ -615,7 +770,8 @@ export class ChatService {
     for (const { projectId, chunks } of perProject) {
       if (chunks.length === 0) continue;
       lists.push({ ids: chunks.map((c) => c.chunkId) });
-      for (const chunk of chunks) byId.set(chunk.chunkId, { ...chunk, projectId });
+      for (const chunk of chunks)
+        byId.set(chunk.chunkId, { ...chunk, projectId });
     }
 
     return reciprocalRankFusion(lists)
@@ -639,9 +795,14 @@ export class ChatService {
     // after the watermark) — instead of the full, ever-growing transcript.
     // Before the first summary the whole (still short) history is loaded, as before.
     const allMessages = summarizedThroughMsgId
-      ? await this.messagesRepository.findAfterMessage(conversationId, summarizedThroughMsgId)
+      ? await this.messagesRepository.findAfterMessage(
+          conversationId,
+          summarizedThroughMsgId,
+        )
       : await this.messagesRepository.findAllByConversation(conversationId);
-    return toExchanges(allMessages.slice(0, -2)).filter((ex) => ex.answerStatus === 'complete');
+    return toExchanges(allMessages.slice(0, -2)).filter(
+      (ex) => ex.answerStatus === 'complete',
+    );
   }
 
   /**
@@ -661,7 +822,11 @@ export class ChatService {
     // watermark exists, `priorExchanges` is just the un-summarized tail (not the
     // full history — see computePriorExchanges), so this count would wrongly stop
     // summarizing; skip the gate then and let eviction fold the tail forward.
-    if (!conversation.summarizedThroughMsgId && allExchanges.length <= SUMMARY_TRIGGER_EXCHANGES) return;
+    if (
+      !conversation.summarizedThroughMsgId &&
+      allExchanges.length <= SUMMARY_TRIGGER_EXCHANGES
+    )
+      return;
 
     const evicted = evictedExchanges(
       allExchanges,
@@ -670,7 +835,10 @@ export class ChatService {
     );
     if (evicted.length === 0) return;
 
-    const { system, user } = buildSummaryPrompt(conversation.summary, evicted.map(toPromptExchange));
+    const { system, user } = buildSummaryPrompt(
+      conversation.summary,
+      evicted.map(toPromptExchange),
+    );
     const summarized = await this.chatProvider.complete(
       { system, user, maxTokens: SUMMARY_MAX_TOKENS },
       signal,
@@ -693,18 +861,31 @@ export class ChatService {
    * served the turn (see `ChatCompletion.servedBy`), so a failed-over turn is
    * recorded under Groq, not the configured-primary Gemini.
    */
-  private splitProviderId(id: string): { provider: string; model: string | null } {
+  private splitProviderId(id: string): {
+    provider: string;
+    model: string | null;
+  } {
     const [provider, ...modelParts] = id.split(':');
-    return { provider: provider ?? id, model: modelParts.length > 0 ? modelParts.join(':') : null };
+    return {
+      provider: provider ?? id,
+      model: modelParts.length > 0 ? modelParts.join(':') : null,
+    };
   }
 
   private async requireConversation(id: string): Promise<ConversationRow> {
     const conversation = await this.conversationsRepository.findById(id);
-    if (!conversation) throw new NotFoundException(`Conversation ${id} not found`);
+    if (!conversation)
+      throw new NotFoundException(`Conversation ${id} not found`);
     return conversation;
   }
 }
 
-function toPromptExchange(exchange: Exchange): { question: string; answer: string } {
-  return { question: exchange.question, answer: truncateAnswer(exchange.answer) };
+function toPromptExchange(exchange: Exchange): {
+  question: string;
+  answer: string;
+} {
+  return {
+    question: exchange.question,
+    answer: truncateAnswer(exchange.answer),
+  };
 }

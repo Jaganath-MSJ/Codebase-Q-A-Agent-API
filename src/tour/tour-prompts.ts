@@ -54,7 +54,9 @@ export function buildTourMapPrompt(batch: MarkedEvidence[]): PromptPair {
 }
 
 export function buildTourReducePrompt(groupSummaries: string[]): PromptPair {
-  const combined = groupSummaries.map((summary, i) => `Group ${i + 1}:\n${summary}`).join('\n\n');
+  const combined = groupSummaries
+    .map((summary, i) => `Group ${i + 1}:\n${summary}`)
+    .join('\n\n');
   return {
     system: REDUCE_SYSTEM_PROMPT,
     user: `GROUP SUMMARIES:\n${combined}`,

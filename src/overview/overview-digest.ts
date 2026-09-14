@@ -115,7 +115,9 @@ function majorVersion(range: string): string | null {
   return match ? match[1]! : null;
 }
 
-export function detectFrameworks(dependencies: Record<string, string>): string[] {
+export function detectFrameworks(
+  dependencies: Record<string, string>,
+): string[] {
   const seen = new Set<string>();
   const results: string[] = [];
   for (const [dep, label] of Object.entries(FRAMEWORK_LABELS)) {
@@ -134,7 +136,9 @@ const MAX_README_CHARS = 500;
 /** Drops a leading `# Title` line, then returns the first real paragraph, whitespace-collapsed and capped. */
 export function firstParagraph(markdown: string): string | null {
   const lines = markdown.split('\n');
-  const body = /^#+\s/.test(lines[0] ?? '') ? lines.slice(1).join('\n') : markdown;
+  const body = /^#+\s/.test(lines[0] ?? '')
+    ? lines.slice(1).join('\n')
+    : markdown;
 
   const paragraphs = body
     .split(/\n\s*\n/)
@@ -145,7 +149,9 @@ export function firstParagraph(markdown: string): string | null {
   if (!first) return null;
 
   const collapsed = first.replace(/\s+/g, ' ').trim();
-  return collapsed.length > MAX_README_CHARS ? `${collapsed.slice(0, MAX_README_CHARS)}…` : collapsed;
+  return collapsed.length > MAX_README_CHARS
+    ? `${collapsed.slice(0, MAX_README_CHARS)}…`
+    : collapsed;
 }
 
 export function renderOverviewDigest(facts: RepoOverviewFacts): string {
@@ -154,7 +160,9 @@ export function renderOverviewDigest(facts: RepoOverviewFacts): string {
   lines.push(`${facts.name}${langSuffix} ${facts.totalFiles} files.`);
 
   if (facts.topDirs.length > 0) {
-    lines.push(`Top dirs: ${facts.topDirs.map((d) => `${d.dir} (${d.count})`).join(', ')}.`);
+    lines.push(
+      `Top dirs: ${facts.topDirs.map((d) => `${d.dir} (${d.count})`).join(', ')}.`,
+    );
   }
   if (facts.frameworks.length > 0) {
     lines.push(`Detected: ${facts.frameworks.join(', ')}.`);

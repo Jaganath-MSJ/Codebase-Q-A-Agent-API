@@ -36,8 +36,12 @@ describe('LineWindowChunker property test', () => {
       const chunks = chunker.chunk(lines);
 
       for (const chunk of chunks) {
-        const reconstructed = lines.slice(chunk.startLine - 1, chunk.endLine).join('\n');
-        expect(reconstructed, `mismatch in ${rel} chunk ${chunk.ord}`).toBe(chunk.content);
+        const reconstructed = lines
+          .slice(chunk.startLine - 1, chunk.endLine)
+          .join('\n');
+        expect(reconstructed, `mismatch in ${rel} chunk ${chunk.ord}`).toBe(
+          chunk.content,
+        );
       }
     }
   });
@@ -51,7 +55,12 @@ describe('LineWindowChunker property test', () => {
     const { lines } = toLines('const x = 1;');
     const chunks = new LineWindowChunker().chunk(lines);
     expect(chunks).toHaveLength(1);
-    expect(chunks[0]).toEqual({ ord: 0, startLine: 1, endLine: 1, content: 'const x = 1;' });
+    expect(chunks[0]).toEqual({
+      ord: 0,
+      startLine: 1,
+      endLine: 1,
+      content: 'const x = 1;',
+    });
   });
 
   it('normalizes CRLF input before chunking', () => {
@@ -76,11 +85,15 @@ describe('LineWindowChunker property test', () => {
 
     expect(chunks.length).toBeGreaterThan(1);
     for (const chunk of chunks) {
-      expect(lines.slice(chunk.startLine - 1, chunk.endLine).join('\n')).toBe(chunk.content);
+      expect(lines.slice(chunk.startLine - 1, chunk.endLine).join('\n')).toBe(
+        chunk.content,
+      );
     }
     // consecutive chunks overlap or at least touch, never leaving a gap
     for (let i = 1; i < chunks.length; i++) {
-      expect(chunks[i]!.startLine).toBeLessThanOrEqual(chunks[i - 1]!.endLine + 1);
+      expect(chunks[i]!.startLine).toBeLessThanOrEqual(
+        chunks[i - 1]!.endLine + 1,
+      );
     }
     // full coverage: first chunk starts at line 1, last chunk reaches the end
     expect(chunks[0]!.startLine).toBe(1);

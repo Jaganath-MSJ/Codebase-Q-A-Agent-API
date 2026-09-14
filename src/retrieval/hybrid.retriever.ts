@@ -19,11 +19,14 @@ const RRF_K = 60;
  * multiple distinct ids in fusion even after per-arm deduplication — this
  * keeps every arm voting for the exact same id for a given file.
  */
-export function buildCanonicalIdByPath(...resultLists: ScoredChunk[][]): Map<string, string> {
+export function buildCanonicalIdByPath(
+  ...resultLists: ScoredChunk[][]
+): Map<string, string> {
   const canonicalIdByPath = new Map<string, string>();
   for (const results of resultLists) {
     for (const chunk of results) {
-      if (!canonicalIdByPath.has(chunk.path)) canonicalIdByPath.set(chunk.path, chunk.chunkId);
+      if (!canonicalIdByPath.has(chunk.path))
+        canonicalIdByPath.set(chunk.path, chunk.chunkId);
     }
   }
   return canonicalIdByPath;
@@ -71,7 +74,11 @@ export class HybridRetriever {
       this.vectorRetriever.search(projectId, queryVector, VECTOR_POOL),
       this.ftsRetriever.search(projectId, query, FTS_POOL),
       identifierTokens.length > 0
-        ? this.trigramRetriever.search(projectId, identifierTokens.join(' '), TRIGRAM_POOL)
+        ? this.trigramRetriever.search(
+            projectId,
+            identifierTokens.join(' '),
+            TRIGRAM_POOL,
+          )
         : Promise.resolve([]),
     ]);
 
@@ -80,17 +87,26 @@ export class HybridRetriever {
       if (!chunksById.has(chunk.chunkId)) chunksById.set(chunk.chunkId, chunk);
     }
 
-    const canonicalIdByPath = buildCanonicalIdByPath(vectorResults, ftsResults, trigramResults);
+    const canonicalIdByPath = buildCanonicalIdByPath(
+      vectorResults,
+      ftsResults,
+      trigramResults,
+    );
 
     const fused = reciprocalRankFusion(
       [
         { ids: toCanonicalRankedIds(vectorResults, canonicalIdByPath) },
         { ids: toCanonicalRankedIds(ftsResults, canonicalIdByPath) },
-        { ids: toCanonicalRankedIds(trigramResults, canonicalIdByPath), weight: TRIGRAM_WEIGHT },
+        {
+          ids: toCanonicalRankedIds(trigramResults, canonicalIdByPath),
+          weight: TRIGRAM_WEIGHT,
+        },
       ],
       RRF_K,
     );
 
-    return fused.slice(0, limit).map(({ id, score }) => ({ ...chunksById.get(id)!, score }));
+    return fused
+      .slice(0, limit)
+      .map(({ id, score }) => ({ ...chunksById.get(id)!, score }));
   }
 }

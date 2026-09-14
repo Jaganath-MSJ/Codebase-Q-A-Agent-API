@@ -39,7 +39,8 @@ describe('CachingEmbeddingProvider corrupt-cache handling', () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  const binFiles = async () => (await readdir(modelDir)).filter((f) => f.endsWith('.bin'));
+  const binFiles = async () =>
+    (await readdir(modelDir)).filter((f) => f.endsWith('.bin'));
 
   it('treats a 0-byte cache file as a miss, re-embeds, and heals it', async () => {
     // Poison: write a 0-byte file at the exact path the provider would read.

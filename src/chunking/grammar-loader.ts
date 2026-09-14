@@ -14,7 +14,8 @@ export async function createTreeSitterChunker(): Promise<TreeSitterChunker> {
 
   const entries = await Promise.all(
     (Object.entries(GRAMMAR_WASM) as [GrammarLang, string][]).map(
-      async ([lang, moduleSpecifier]) => [lang, await Language.load(require.resolve(moduleSpecifier))] as const,
+      async ([lang, moduleSpecifier]) =>
+        [lang, await Language.load(require.resolve(moduleSpecifier))] as const,
     ),
   );
 

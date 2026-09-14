@@ -9,7 +9,10 @@ export class ProjectsRepository {
   constructor(@Inject(DB_TOKEN) private readonly db: Db) {}
 
   async create(
-    data: Pick<NewProjectRow, 'name' | 'sourceRef' | 'sourceKind' | 'defaultBranch'>,
+    data: Pick<
+      NewProjectRow,
+      'name' | 'sourceRef' | 'sourceKind' | 'defaultBranch'
+    >,
   ): Promise<ProjectRow> {
     const [row] = await this.db.insert(projects).values(data).returning();
     if (!row) throw new Error('Insert returned no row');
@@ -21,7 +24,10 @@ export class ProjectsRepository {
   }
 
   async findById(id: string): Promise<ProjectRow | undefined> {
-    const [row] = await this.db.select().from(projects).where(eq(projects.id, id));
+    const [row] = await this.db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, id));
     return row;
   }
 
@@ -54,7 +60,10 @@ export class ProjectsRepository {
 
   /** Cascades to files/chunks/indexing_jobs/conversations/messages/citations via FK ON DELETE CASCADE. */
   async delete(id: string): Promise<boolean> {
-    const result = await this.db.delete(projects).where(eq(projects.id, id)).returning({ id: projects.id });
+    const result = await this.db
+      .delete(projects)
+      .where(eq(projects.id, id))
+      .returning({ id: projects.id });
     return result.length > 0;
   }
 }

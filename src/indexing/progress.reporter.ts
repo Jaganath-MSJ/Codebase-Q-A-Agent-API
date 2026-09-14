@@ -36,7 +36,11 @@ export class ProgressReporter {
 
     return async (update) => {
       // Emit the in-memory signal on every update so SSE stays responsive.
-      this.eventBus.emit({ type: 'job.progress', projectId: job.projectId, jobId: job.id });
+      this.eventBus.emit({
+        type: 'job.progress',
+        projectId: job.projectId,
+        jobId: job.id,
+      });
 
       if (update.phase !== persistedPhase) {
         // Phase transition: flush the previous phase's last (unwritten) update so

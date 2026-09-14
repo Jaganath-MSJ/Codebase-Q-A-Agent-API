@@ -26,8 +26,12 @@ export interface ExportMessage {
  * to point at — `local_path`/`zip_upload` projects' `headRevision` is a
  * content-tree hash, not a commit a browser can resolve against any origin.
  */
-export function buildCitationLink(project: ExportProject, citation: ExportCitation): string | null {
-  const isGitHub = project.sourceKind === 'git_url' || project.sourceKind === 'git_private';
+export function buildCitationLink(
+  project: ExportProject,
+  citation: ExportCitation,
+): string | null {
+  const isGitHub =
+    project.sourceKind === 'git_url' || project.sourceKind === 'git_private';
   if (!isGitHub || !project.headRevision) return null;
 
   const repoUrl = project.sourceRef.replace(/\.git\/?$/, '').replace(/\/$/, '');
@@ -39,18 +43,27 @@ function replaceMarkers(
   byMarker: Map<number, ExportCitation>,
   linkFor: (citation: ExportCitation) => string | null,
 ): string {
-  return text.replace(MARKER_RE, (whole, bracketList: string | undefined, singleMarker: string | undefined) => {
-    const markers = bracketList ? bracketList.split(',').map((n) => Number(n.trim())) : [Number(singleMarker)];
+  return text.replace(
+    MARKER_RE,
+    (
+      whole,
+      bracketList: string | undefined,
+      singleMarker: string | undefined,
+    ) => {
+      const markers = bracketList
+        ? bracketList.split(',').map((n) => Number(n.trim()))
+        : [Number(singleMarker)];
 
-    return markers
-      .map((marker) => {
-        const citation = byMarker.get(marker);
-        if (!citation) return `[${marker}]`;
-        const url = linkFor(citation);
-        return url ? `[${marker}](${url})` : `[${marker}]`;
-      })
-      .join(' ');
-  });
+      return markers
+        .map((marker) => {
+          const citation = byMarker.get(marker);
+          if (!citation) return `[${marker}]`;
+          const url = linkFor(citation);
+          return url ? `[${marker}](${url})` : `[${marker}]`;
+        })
+        .join(' ');
+    },
+  );
 }
 
 const FENCE_SPLIT_RE = /(```[\s\S]*?```)/g;
@@ -71,7 +84,9 @@ export function renderAnswerMarkdown(
   // blocks themselves — left untouched — even-indexed ones are prose.
   return content
     .split(FENCE_SPLIT_RE)
-    .map((part, i) => (i % 2 === 1 ? part : replaceMarkers(part, byMarker, linkFor)))
+    .map((part, i) =>
+      i % 2 === 1 ? part : replaceMarkers(part, byMarker, linkFor),
+    )
     .join('');
 }
 
@@ -79,7 +94,9 @@ function buildSourcesLine(
   citations: ExportCitation[],
   linkFor: (citation: ExportCitation) => string | null,
 ): string | null {
-  const cited = citations.filter((c) => c.used).sort((a, b) => a.marker - b.marker);
+  const cited = citations
+    .filter((c) => c.used)
+    .sort((a, b) => a.marker - b.marker);
   if (cited.length === 0) return null;
 
   const parts = cited.map((c) => {
@@ -97,9 +114,15 @@ export function buildConversationMarkdown(input: {
   messages: ExportMessage[];
 }): string {
   const { conversationTitle, project, messages } = input;
-  const linkFor = (citation: ExportCitation) => buildCitationLink(project, citation);
+  const linkFor = (citation: ExportCitation) =>
+    buildCitationLink(project, citation);
 
-  const lines: string[] = [`# ${conversationTitle ?? 'Conversation'}`, '', `Project: ${project.name}`, ''];
+  const lines: string[] = [
+    `# ${conversationTitle ?? 'Conversation'}`,
+    '',
+    `Project: ${project.name}`,
+    '',
+  ];
 
   for (const message of messages) {
     if (message.role === 'user') {
@@ -107,7 +130,12 @@ export function buildConversationMarkdown(input: {
       continue;
     }
 
-    lines.push('## Assistant', '', renderAnswerMarkdown(message.content, message.citations, linkFor), '');
+    lines.push(
+      '## Assistant',
+      '',
+      renderAnswerMarkdown(message.content, message.citations, linkFor),
+      '',
+    );
     const sourcesLine = buildSourcesLine(message.citations, linkFor);
     if (sourcesLine) lines.push(sourcesLine, '');
   }

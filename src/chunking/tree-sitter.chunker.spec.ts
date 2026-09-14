@@ -47,8 +47,12 @@ describe('TreeSitterChunker', () => {
         const chunks = chunker.chunk(lines, langOf(rel));
 
         for (const chunk of chunks) {
-          const reconstructed = lines.slice(chunk.startLine - 1, chunk.endLine).join('\n');
-          expect(reconstructed, `mismatch in ${rel} chunk ${chunk.ord}`).toBe(chunk.content);
+          const reconstructed = lines
+            .slice(chunk.startLine - 1, chunk.endLine)
+            .join('\n');
+          expect(reconstructed, `mismatch in ${rel} chunk ${chunk.ord}`).toBe(
+            chunk.content,
+          );
         }
       }
     });
@@ -72,16 +76,24 @@ describe('TreeSitterChunker', () => {
 
   describe('symbol population', () => {
     it('populates symbol for TypeScript top-level functions', async () => {
-      const raw = await readFile(path.join(FIXTURE_ROOT, 'src/auth.service.ts'), 'utf8');
+      const raw = await readFile(
+        path.join(FIXTURE_ROOT, 'src/auth.service.ts'),
+        'utf8',
+      );
       const { lines } = toLines(raw);
       const chunks = chunker.chunk(lines, 'ts');
 
-      expect(chunks.some((c) => c.symbol?.includes('findUserByEmail'))).toBe(true);
+      expect(chunks.some((c) => c.symbol?.includes('findUserByEmail'))).toBe(
+        true,
+      );
       expect(chunks.some((c) => c.symbol?.includes('validateUser'))).toBe(true);
     });
 
     it('populates symbol for a TypeScript class', async () => {
-      const raw = await readFile(path.join(FIXTURE_ROOT, 'src/big-module.ts'), 'utf8');
+      const raw = await readFile(
+        path.join(FIXTURE_ROOT, 'src/big-module.ts'),
+        'utf8',
+      );
       const { lines } = toLines(raw);
       const chunks = chunker.chunk(lines, 'ts');
 
@@ -89,7 +101,10 @@ describe('TreeSitterChunker', () => {
     });
 
     it('populates symbol for Python class and function definitions', async () => {
-      const raw = await readFile(path.join(FIXTURE_ROOT, 'src/shapes.py'), 'utf8');
+      const raw = await readFile(
+        path.join(FIXTURE_ROOT, 'src/shapes.py'),
+        'utf8',
+      );
       const { lines } = toLines(raw);
       const chunks = chunker.chunk(lines, 'py');
 
@@ -106,7 +121,10 @@ describe('TreeSitterChunker', () => {
 
   describe('structural splitting', () => {
     it('splits an oversized class into one chunk per method, each qualified by the class name', () => {
-      const methodBody = Array.from({ length: 20 }, (_, i) => `    // line ${i}`).join('\n');
+      const methodBody = Array.from(
+        { length: 20 },
+        (_, i) => `    // line ${i}`,
+      ).join('\n');
       const src = [
         'export class Big {',
         `  one() {\n${methodBody}\n  }`,
@@ -124,12 +142,17 @@ describe('TreeSitterChunker', () => {
       expect(symbols).toContain('Big.three');
       // every chunk still individually reconstructs, the same property the fixture test checks
       for (const chunk of chunks) {
-        expect(lines.slice(chunk.startLine - 1, chunk.endLine).join('\n')).toBe(chunk.content);
+        expect(lines.slice(chunk.startLine - 1, chunk.endLine).join('\n')).toBe(
+          chunk.content,
+        );
       }
     });
 
     it('splits an oversized top-level function via the line-window fallback, keeping its symbol', () => {
-      const body = Array.from({ length: 100 }, (_, i) => `  console.log(${i});`).join('\n');
+      const body = Array.from(
+        { length: 100 },
+        (_, i) => `  console.log(${i});`,
+      ).join('\n');
       const src = `function huge() {\n${body}\n}`;
       const lines = src.split('\n');
 
@@ -138,7 +161,9 @@ describe('TreeSitterChunker', () => {
       expect(chunks.length).toBeGreaterThan(1);
       expect(chunks.every((c) => c.symbol === 'huge')).toBe(true);
       for (const chunk of chunks) {
-        expect(lines.slice(chunk.startLine - 1, chunk.endLine).join('\n')).toBe(chunk.content);
+        expect(lines.slice(chunk.startLine - 1, chunk.endLine).join('\n')).toBe(
+          chunk.content,
+        );
       }
     });
   });

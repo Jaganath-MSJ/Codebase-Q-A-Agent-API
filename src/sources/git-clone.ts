@@ -6,7 +6,8 @@ import simpleGit, { CleanOptions, type SimpleGit } from 'simple-git';
 // https:// only, github.com only, owner/repo shape, no shell metacharacters —
 // this string is about to be shelled out to via an argument array (never a
 // command string), but it is still worth rejecting anything unexpected here.
-export const GITHUB_URL_RE = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+?(?:\.git)?\/?$/;
+export const GITHUB_URL_RE =
+  /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+?(?:\.git)?\/?$/;
 
 // `branch` reaches `git fetch`/`git clone` as a bare positional argv entry
 // (not a shell string, so no shell injection) — but a value starting with
@@ -71,10 +72,16 @@ function git(cwd?: string, env?: GitEnv) {
   return env ? instance.env({ ...baseGitEnv(), ...env }) : instance;
 }
 
-export async function resolveDefaultBranch(url: string, env?: GitEnv): Promise<string> {
+export async function resolveDefaultBranch(
+  url: string,
+  env?: GitEnv,
+): Promise<string> {
   const raw = await git(undefined, env).listRemote(['--symref', url, 'HEAD']);
   const match = /ref:\s+refs\/heads\/(\S+)\s+HEAD/.exec(raw);
-  if (!match) throw new BadRequestException(`Could not determine the default branch for ${url}`);
+  if (!match)
+    throw new BadRequestException(
+      `Could not determine the default branch for ${url}`,
+    );
   return match[1]!;
 }
 
@@ -84,14 +91,32 @@ export async function resolveDefaultBranch(url: string, env?: GitEnv): Promise<s
  * runs on an interval to notice a moved remote head, distinct from
  * `refreshRepo`'s real `git fetch` that only runs once a job actually starts.
  */
-export async function remoteHeadSha(url: string, branch: string, env?: GitEnv): Promise<string | null> {
-  if (!SAFE_BRANCH_RE.test(branch)) throw new BadRequestException(`Not a valid branch name: ${branch}`);
-  const raw = await git(undefined, env).listRemote([url, `refs/heads/${branch}`]);
+export async function remoteHeadSha(
+  url: string,
+  branch: string,
+  env?: GitEnv,
+): Promise<string | null> {
+  if (!SAFE_BRANCH_RE.test(branch))
+    throw new BadRequestException(`Not a valid branch name: ${branch}`);
+  const raw = await git(undefined, env).listRemote([
+    url,
+    `refs/heads/${branch}`,
+  ]);
   return raw.split(/\s+/)[0] || null;
 }
 
-export async function cloneRepo(url: string, branch: string, dest: string, env?: GitEnv): Promise<void> {
-  await rm(dest, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+export async function cloneRepo(
+  url: string,
+  branch: string,
+  dest: string,
+  env?: GitEnv,
+): Promise<void> {
+  await rm(dest, {
+    recursive: true,
+    force: true,
+    maxRetries: 3,
+    retryDelay: 200,
+  });
   await mkdir(path.dirname(dest), { recursive: true });
   await git(undefined, env).clone(url, dest, [
     '--depth',
@@ -103,11 +128,17 @@ export async function cloneRepo(url: string, branch: string, dest: string, env?:
   ]);
 }
 
-export async function refreshRepo(dest: string, branch: string, env?: GitEnv): Promise<void> {
+export async function refreshRepo(
+  dest: string,
+  branch: string,
+  env?: GitEnv,
+): Promise<void> {
   const instance = git(dest, env);
   await instance.fetch('origin', branch, ['--depth', '1']);
   await instance.reset(['--hard', 'FETCH_HEAD']);
-  await instance.clean(CleanOptions.FORCE + CleanOptions.RECURSIVE + CleanOptions.IGNORED_INCLUDED);
+  await instance.clean(
+    CleanOptions.FORCE + CleanOptions.RECURSIVE + CleanOptions.IGNORED_INCLUDED,
+  );
 }
 
 /**
@@ -117,7 +148,10 @@ export async function refreshRepo(dest: string, branch: string, env?: GitEnv): P
  * nothing credential-bearing can persist in .git/config even if something
  * upstream ever rewrote it.
  */
-export async function setCleanRemoteUrl(dest: string, url: string): Promise<void> {
+export async function setCleanRemoteUrl(
+  dest: string,
+  url: string,
+): Promise<void> {
   await simpleGit(dest).remote(['set-url', 'origin', url]);
 }
 
@@ -148,7 +182,9 @@ export interface LastCommitInfo {
  * exactly one commit, on demand, only when this feature actually needs it —
  * the indexing path's own depth is left untouched.
  */
-async function ensurePriorCommitAvailable(instance: SimpleGit): Promise<boolean> {
+async function ensurePriorCommitAvailable(
+  instance: SimpleGit,
+): Promise<boolean> {
   try {
     await instance.revparse(['HEAD~1']);
     return true;
@@ -164,7 +200,9 @@ async function ensurePriorCommitAvailable(instance: SimpleGit): Promise<boolean>
 }
 
 /** Null when there's no prior commit to diff against (a brand-new repo, or the deepen fetch itself failed). */
-export async function lastCommitDiff(dest: string): Promise<LastCommitInfo | null> {
+export async function lastCommitDiff(
+  dest: string,
+): Promise<LastCommitInfo | null> {
   const instance = git(dest);
   if (!(await ensurePriorCommitAvailable(instance))) return null;
 
@@ -175,11 +213,23 @@ export async function lastCommitDiff(dest: string): Promise<LastCommitInfo | nul
   const files: ChangedFile[] = [];
   for (const file of summary.files) {
     if (file.binary) {
-      files.push({ path: file.file, insertions: 0, deletions: 0, binary: true, patch: '' });
+      files.push({
+        path: file.file,
+        insertions: 0,
+        deletions: 0,
+        binary: true,
+        patch: '',
+      });
       continue;
     }
     const patch = await instance.diff(['HEAD~1', '--', file.file]);
-    files.push({ path: file.file, insertions: file.insertions, deletions: file.deletions, binary: false, patch });
+    files.push({
+      path: file.file,
+      insertions: file.insertions,
+      deletions: file.deletions,
+      binary: false,
+      patch,
+    });
   }
 
   return {

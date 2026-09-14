@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
@@ -40,12 +44,17 @@ export class ProjectsService {
     if (sourceKind === 'zip_upload') {
       let uploadPath: string;
       try {
-        uploadPath = resolveUploadPath(path.join(this.config.dataDir, 'uploads'), dto.sourceRef);
+        uploadPath = resolveUploadPath(
+          path.join(this.config.dataDir, 'uploads'),
+          dto.sourceRef,
+        );
       } catch {
         throw new BadRequestException(`Not a valid uploadId: ${dto.sourceRef}`);
       }
       if (!existsSync(uploadPath)) {
-        throw new BadRequestException(`Upload ${dto.sourceRef} not found — upload the zip first`);
+        throw new BadRequestException(
+          `Upload ${dto.sourceRef} not found — upload the zip first`,
+        );
       }
     }
 
@@ -64,7 +73,11 @@ export class ProjectsService {
     // something to point at — the token itself is encrypted before it ever
     // reaches CredentialsRepository, never passed through in plaintext form.
     if (sourceKind === 'git_private') {
-      await this.credentialsService.setCredential(project.id, 'github_pat', dto.token!);
+      await this.credentialsService.setCredential(
+        project.id,
+        'github_pat',
+        dto.token!,
+      );
     }
 
     return project;
@@ -78,7 +91,10 @@ export class ProjectsService {
     const project = await this.projectsRepository.findById(projectId);
     if (!project) throw new NotFoundException(`Project ${projectId} not found`);
 
-    const [{ chunkCount, contentBytes, vectorBytes }, { databaseBytes, chunksIndexBytes }] = await Promise.all([
+    const [
+      { chunkCount, contentBytes, vectorBytes },
+      { databaseBytes, chunksIndexBytes },
+    ] = await Promise.all([
       this.storageRepository.getProjectBytes(projectId),
       this.storageRepository.getDatabaseTotals(),
     ]);
@@ -130,7 +146,9 @@ export class ProjectsService {
     try {
       absPath = resolveInside(root, relPath);
     } catch {
-      throw new BadRequestException(`Path escapes the project root: ${relPath}`);
+      throw new BadRequestException(
+        `Path escapes the project root: ${relPath}`,
+      );
     }
 
     let lines: string[];

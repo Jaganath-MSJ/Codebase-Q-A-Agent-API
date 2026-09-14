@@ -24,7 +24,8 @@ describe('ProgressReporter coalescing (Phase 12.10)', () => {
   it('emits an SSE signal on every update but coalesces DB writes', async () => {
     const { onProgress, updateProgress, emit } = build();
     // 50 same-phase updates with no time advance.
-    for (let i = 0; i < 50; i++) await onProgress({ phase: 'chunking', filesDone: i, filesTotal: 50 });
+    for (let i = 0; i < 50; i++)
+      await onProgress({ phase: 'chunking', filesDone: i, filesTotal: 50 });
     expect(emit).toHaveBeenCalledTimes(50); // immediate SSE every update
     expect(updateProgress).toHaveBeenCalledTimes(1); // only the first (phase transition)
   });
@@ -48,7 +49,14 @@ describe('ProgressReporter coalescing (Phase 12.10)', () => {
     await onProgress({ phase: 'embedding', chunksTotal: 10 }); // transition → flush + persist
     expect(updateProgress).toHaveBeenCalledTimes(3);
     // The flush writes the prior phase's final (168), then the transition itself.
-    expect(updateProgress).toHaveBeenNthCalledWith(2, 'j1', { phase: 'chunking', filesDone: 168, filesTotal: 168 });
-    expect(updateProgress).toHaveBeenNthCalledWith(3, 'j1', { phase: 'embedding', chunksTotal: 10 });
+    expect(updateProgress).toHaveBeenNthCalledWith(2, 'j1', {
+      phase: 'chunking',
+      filesDone: 168,
+      filesTotal: 168,
+    });
+    expect(updateProgress).toHaveBeenNthCalledWith(3, 'j1', {
+      phase: 'embedding',
+      chunksTotal: 10,
+    });
   });
 });

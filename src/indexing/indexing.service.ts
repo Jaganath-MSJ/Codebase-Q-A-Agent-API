@@ -1,4 +1,10 @@
-import { ConflictException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import * as path from 'node:path';
 import { ProjectsRepository } from '../db/repositories/projects.repository';
 import { FilesRepository } from '../db/repositories/files.repository';
@@ -15,7 +21,11 @@ import type { EmbeddingProvider } from '../embeddings/embedding-provider.interfa
 import { SourceAdapterRegistry } from '../sources/source-adapter.registry';
 import { RepoOverviewService } from '../overview/repo-overview.service';
 import type { OverviewFileEntry } from '../overview/overview-digest';
-import { DEFAULT_RATE_LIMIT, EmbeddingRateLimiter, withEmbeddingRetry } from './rate-limiter';
+import {
+  DEFAULT_RATE_LIMIT,
+  EmbeddingRateLimiter,
+  withEmbeddingRetry,
+} from './rate-limiter';
 import type { ProjectRow, NewChunkRow } from '../db/schema';
 import type { CostEstimateDto } from '../contracts';
 
@@ -66,7 +76,8 @@ export class IndexingService {
     private readonly repoOverviewService: RepoOverviewService,
     private readonly rateLimiter: EmbeddingRateLimiter,
     @Inject(CHUNKER_TOKEN) private readonly chunker: Chunker,
-    @Inject(EMBEDDING_PROVIDER_TOKEN) private readonly embeddingProvider: EmbeddingProvider,
+    @Inject(EMBEDDING_PROVIDER_TOKEN)
+    private readonly embeddingProvider: EmbeddingProvider,
   ) {}
 
   async indexProject(
@@ -90,7 +101,8 @@ export class IndexingService {
     if (!force && project.headRevision && revision === project.headRevision) {
       await onProgress?.({ phase: 'finalizing' });
       const unchanged = await this.projectsRepository.findById(projectId);
-      if (!unchanged) throw new NotFoundException(`Project ${projectId} not found`);
+      if (!unchanged)
+        throw new NotFoundException(`Project ${projectId} not found`);
       return unchanged;
     }
 
@@ -110,15 +122,29 @@ export class IndexingService {
     const existingByPath = new Map(existing.map((file) => [file.path, file]));
     const walkedPaths = new Set(walked.map((entry) => entry.relPath));
 
-    const staleIds = existing.filter((file) => !walkedPaths.has(file.path)).map((file) => file.id);
+    const staleIds = existing
+      .filter((file) => !walkedPaths.has(file.path))
+      .map((file) => file.id);
     await this.filesRepository.deleteByIds(staleIds);
 
     let filesDone = 0;
-    let filesSkipped = Object.values(skipReasons).reduce((sum, n) => sum + n, 0);
-    await onProgress?.({ phase: 'chunking', filesDone, filesTotal: walked.length, filesSkipped, skipReasons });
+    let filesSkipped = Object.values(skipReasons).reduce(
+      (sum, n) => sum + n,
+      0,
+    );
+    await onProgress?.({
+      phase: 'chunking',
+      filesDone,
+      filesTotal: walked.length,
+      filesSkipped,
+      skipReasons,
+    });
 
     for (const entry of walked) {
-      if (await shouldCancel?.()) throw new IndexCanceledError(`Canceled during chunking at ${entry.relPath}`);
+      if (await shouldCancel?.())
+        throw new IndexCanceledError(
+          `Canceled during chunking at ${entry.relPath}`,
+        );
 
       // Read once by the walker (Phase 12.6) — reuse its normalized text/lines
       // rather than re-reading from disk.
@@ -135,15 +161,16 @@ export class IndexingService {
       // re-index of an unchanged repo skip chunking AND embedding entirely.
       if (!existingFile || existingFile.contentHash !== contentHash) {
         const chunkList = this.chunker.chunk(lines, lang);
-        const chunkRows: Omit<NewChunkRow, 'projectId' | 'fileId'>[] = chunkList.map((chunk) => ({
-          ord: chunk.ord,
-          startLine: chunk.startLine,
-          endLine: chunk.endLine,
-          content: chunk.content,
-          contentHash: sha256(chunk.content),
-          symbol: chunk.symbol ?? null,
-          searchText: buildSearchText(chunk.content),
-        }));
+        const chunkRows: Omit<NewChunkRow, 'projectId' | 'fileId'>[] =
+          chunkList.map((chunk) => ({
+            ord: chunk.ord,
+            startLine: chunk.startLine,
+            endLine: chunk.endLine,
+            content: chunk.content,
+            contentHash: sha256(chunk.content),
+            symbol: chunk.symbol ?? null,
+            searchText: buildSearchText(chunk.content),
+          }));
 
         await this.filesRepository.replaceFile(
           projectId,
@@ -188,7 +215,11 @@ export class IndexingService {
       relPath: entry.relPath,
       lang: langFromPath(entry.relPath),
     }));
-    const overview = await this.repoOverviewService.generate(workspacePath, project.name, fileLangs);
+    const overview = await this.repoOverviewService.generate(
+      workspacePath,
+      project.name,
+      fileLangs,
+    );
 
     const updated = await this.projectsRepository.update(projectId, {
       status: 'ready',
@@ -260,9 +291,12 @@ export class IndexingService {
       entry.lines = [];
     }
 
-    const cachedChunks = await this.chunksRepository.countByFileIds(unchangedFileIds);
+    const cachedChunks =
+      await this.chunksRepository.countByFileIds(unchangedFileIds);
     const totalChunks = cachedChunks + toEmbedChunks;
-    const estimatedRequests = Math.ceil(toEmbedChunks / this.embeddingProvider.maxBatchSize);
+    const estimatedRequests = Math.ceil(
+      toEmbedChunks / this.embeddingProvider.maxBatchSize,
+    );
 
     return {
       unchanged: false,
@@ -272,7 +306,10 @@ export class IndexingService {
       estimatedRequests,
       requestsToday,
       requestsPerDay,
-      percentOfDailyQuota: requestsPerDay > 0 ? Math.round((estimatedRequests / requestsPerDay) * 100) : 0,
+      percentOfDailyQuota:
+        requestsPerDay > 0
+          ? Math.round((estimatedRequests / requestsPerDay) * 100)
+          : 0,
     };
   }
 
@@ -296,7 +333,9 @@ export class IndexingService {
 
     const latestJob = await this.jobsRepository.findLatestByProject(projectId);
     if (latestJob && ACTIVE_JOB_STATUSES.has(latestJob.status)) {
-      throw new ConflictException(`Project ${projectId} has an active indexing job — cancel it first`);
+      throw new ConflictException(
+        `Project ${projectId} has an active indexing job — cancel it first`,
+      );
     }
 
     await this.projectsRepository.delete(projectId);
@@ -305,7 +344,9 @@ export class IndexingService {
       const adapter = this.sourceAdapterRegistry.getAdapter(project.sourceKind);
       await adapter.cleanup(project);
     } catch (err) {
-      this.logger.error(`Workspace cleanup failed for deleted project ${projectId}: ${String(err)}`);
+      this.logger.error(
+        `Workspace cleanup failed for deleted project ${projectId}: ${String(err)}`,
+      );
     }
   }
 
@@ -314,9 +355,14 @@ export class IndexingService {
     onProgress?: OnIndexProgress,
     shouldCancel?: ShouldCancel,
   ): Promise<void> {
-    if (this.embeddingProvider.dimensions !== 768) {
+    // `dimensions` is typed as the literal 768, so a direct `!== 768` narrows
+    // the value to `never` in this branch (breaking the template below). Read it
+    // through a `number` local: the runtime guard still catches a provider that
+    // reports the wrong dimension despite the type.
+    const dims: number = this.embeddingProvider.dimensions;
+    if (dims !== 768) {
       throw new Error(
-        `Embedding provider '${this.embeddingProvider.id}' reports ${this.embeddingProvider.dimensions} dimensions; this project requires exactly 768.`,
+        `Embedding provider '${this.embeddingProvider.id}' reports ${dims} dimensions; this project requires exactly 768.`,
       );
     }
 
@@ -324,10 +370,16 @@ export class IndexingService {
     const chunksTotal = pending.length;
     let chunksEmbedded = 0;
     let embedRequests = 0;
-    await onProgress?.({ phase: 'embedding', chunksTotal, chunksEmbedded, embedRequests });
+    await onProgress?.({
+      phase: 'embedding',
+      chunksTotal,
+      chunksEmbedded,
+      embedRequests,
+    });
 
     for (const group of batch(pending, this.embeddingProvider.maxBatchSize)) {
-      if (await shouldCancel?.()) throw new IndexCanceledError('Canceled during embedding');
+      if (await shouldCancel?.())
+        throw new IndexCanceledError('Canceled during embedding');
 
       await this.rateLimiter.reserve();
       const vectors = await withEmbeddingRetry(async () => {
@@ -338,13 +390,17 @@ export class IndexingService {
         // into a loud, retryable error instead of a cryptic pgvector dimension
         // mismatch several layers away.
         const describeBatch = () =>
-          group.map((c) => `${c.path ?? '?'}:${c.startLine}-${c.endLine}`).join(', ');
+          group
+            .map((c) => `${c.path ?? '?'}:${c.startLine}-${c.endLine}`)
+            .join(', ');
         if (result.length !== group.length) {
           throw new Error(
             `Embedding provider returned ${result.length} vectors for a batch of ${group.length} chunks [${describeBatch()}]`,
           );
         }
-        const badIndex = result.findIndex((v) => v.length !== this.embeddingProvider.dimensions);
+        const badIndex = result.findIndex(
+          (v) => v.length !== this.embeddingProvider.dimensions,
+        );
         if (badIndex !== -1) {
           throw new Error(
             `Embedding provider returned a ${result[badIndex]!.length}-dimensional vector at batch index ${badIndex}, expected ${this.embeddingProvider.dimensions} [${describeBatch()}]`,
@@ -358,7 +414,12 @@ export class IndexingService {
         group.map((chunk, i) => ({ id: chunk.id, embedding: vectors[i]! })),
       );
       chunksEmbedded += group.length;
-      await onProgress?.({ phase: 'embedding', chunksTotal, chunksEmbedded, embedRequests });
+      await onProgress?.({
+        phase: 'embedding',
+        chunksTotal,
+        chunksEmbedded,
+        embedRequests,
+      });
     }
   }
 }

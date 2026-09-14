@@ -36,7 +36,10 @@ export class CachingChatProvider implements ChatProvider {
     this.supportsTools = inner.supportsTools;
   }
 
-  async complete(req: ChatRequest, signal?: AbortSignal): Promise<ChatCompletion> {
+  async complete(
+    req: ChatRequest,
+    signal?: AbortSignal,
+  ): Promise<ChatCompletion> {
     const cachePath = this.cachePath(req);
 
     try {
@@ -52,11 +55,16 @@ export class CachingChatProvider implements ChatProvider {
     return result;
   }
 
-  async *stream(req: ChatRequest, signal?: AbortSignal): AsyncIterable<ChatEvent> {
+  async *stream(
+    req: ChatRequest,
+    signal?: AbortSignal,
+  ): AsyncIterable<ChatEvent> {
     const cachePath = this.cachePath(req);
 
     try {
-      const cached = JSON.parse(await readFile(cachePath, 'utf8')) as CachedStream;
+      const cached = JSON.parse(
+        await readFile(cachePath, 'utf8'),
+      ) as CachedStream;
       if (cached.text) yield { type: 'text', delta: cached.text };
       for (const call of cached.toolCalls) yield { type: 'tool_call', ...call };
       yield {
@@ -64,7 +72,11 @@ export class CachingChatProvider implements ChatProvider {
         inputTokens: cached.usage.inputTokens ?? 0,
         outputTokens: cached.usage.outputTokens ?? 0,
       };
-      yield { type: 'done', stopReason: cached.stopReason, servedBy: cached.servedBy };
+      yield {
+        type: 'done',
+        stopReason: cached.stopReason,
+        servedBy: cached.servedBy,
+      };
       return;
     } catch {
       // cache miss
@@ -79,9 +91,18 @@ export class CachingChatProvider implements ChatProvider {
     for await (const event of this.inner.stream(req, signal)) {
       if (event.type === 'text') text += event.delta;
       if (event.type === 'tool_call') {
-        toolCalls.push({ id: event.id, name: event.name, args: event.args, providerData: event.providerData });
+        toolCalls.push({
+          id: event.id,
+          name: event.name,
+          args: event.args,
+          providerData: event.providerData,
+        });
       }
-      if (event.type === 'usage') usage = { inputTokens: event.inputTokens, outputTokens: event.outputTokens };
+      if (event.type === 'usage')
+        usage = {
+          inputTokens: event.inputTokens,
+          outputTokens: event.outputTokens,
+        };
       if (event.type === 'done') {
         stopReason = event.stopReason;
         servedBy = event.servedBy;
@@ -91,7 +112,16 @@ export class CachingChatProvider implements ChatProvider {
 
     if (!signal?.aborted) {
       await mkdir(this.cacheDir, { recursive: true });
-      await writeFile(cachePath, JSON.stringify({ text, usage, toolCalls, stopReason, servedBy } satisfies CachedStream));
+      await writeFile(
+        cachePath,
+        JSON.stringify({
+          text,
+          usage,
+          toolCalls,
+          stopReason,
+          servedBy,
+        } satisfies CachedStream),
+      );
     }
   }
 

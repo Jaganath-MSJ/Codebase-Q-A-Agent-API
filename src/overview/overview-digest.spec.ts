@@ -20,7 +20,9 @@ describe('mostCommonLanguage', () => {
   });
 
   it('returns null when nothing matches a known language', () => {
-    expect(mostCommonLanguage([{ relPath: 'a.json', lang: 'json' }])).toBeNull();
+    expect(
+      mostCommonLanguage([{ relPath: 'a.json', lang: 'json' }]),
+    ).toBeNull();
   });
 });
 
@@ -50,7 +52,9 @@ describe('topLevelDirCounts', () => {
 
 describe('detectFrameworks', () => {
   it('extracts a major version from a semver range', () => {
-    expect(detectFrameworks({ '@nestjs/core': '^11.0.2' })).toEqual(['NestJS 11']);
+    expect(detectFrameworks({ '@nestjs/core': '^11.0.2' })).toEqual([
+      'NestJS 11',
+    ]);
   });
 
   it('omits the version when it cannot be parsed', () => {
@@ -58,7 +62,9 @@ describe('detectFrameworks', () => {
   });
 
   it('never lists a label twice, even if two aliases both match', () => {
-    expect(detectFrameworks({ react: '^19.0.0', 'react-dom': '^19.0.0' })).toEqual(['React 19']);
+    expect(
+      detectFrameworks({ react: '^19.0.0', 'react-dom': '^19.0.0' }),
+    ).toEqual(['React 19']);
   });
 
   it('ignores dependencies with no known framework label', () => {
@@ -68,7 +74,8 @@ describe('detectFrameworks', () => {
 
 describe('firstParagraph', () => {
   it('drops a leading H1 and returns the next paragraph', () => {
-    const md = '# Tiny Repo\n\nA small fixture repository.\n\n## What\'s here\n\n- item';
+    const md =
+      "# Tiny Repo\n\nA small fixture repository.\n\n## What's here\n\n- item";
     expect(firstParagraph(md)).toBe('A small fixture repository.');
   });
 
@@ -89,7 +96,7 @@ describe('firstParagraph', () => {
 });
 
 describe('renderOverviewDigest', () => {
-  it('matches the phase doc\'s rendered example shape', () => {
+  it("matches the phase doc's rendered example shape", () => {
     const digest = renderOverviewDigest({
       name: 'codebase-qa-agent',
       totalFiles: 412,

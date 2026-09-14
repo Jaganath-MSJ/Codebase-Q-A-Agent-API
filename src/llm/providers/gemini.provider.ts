@@ -33,7 +33,11 @@ function toStopReason(reason: FinishReason | undefined): ChatStopReason {
 }
 
 function toFunctionDeclaration(tool: ToolDefinition): FunctionDeclaration {
-  return { name: tool.name, description: tool.description, parametersJsonSchema: tool.parameters };
+  return {
+    name: tool.name,
+    description: tool.description,
+    parametersJsonSchema: tool.parameters,
+  };
 }
 
 /** `req.priorTurns` maps onto Gemini's own alternating model/user `Content` shape. */
@@ -49,13 +53,16 @@ function buildContents(req: ChatRequest): Content[] {
         // Gemini rejects the follow-up request (400 INVALID_ARGUMENT) if a
         // function-call part from a prior turn is replayed without the
         // `thoughtSignature` it originally carried.
-        if (typeof call.providerData === 'string') part.thoughtSignature = call.providerData;
+        if (typeof call.providerData === 'string')
+          part.thoughtSignature = call.providerData;
         parts.push(part);
       }
       contents.push({ role: 'model', parts });
     } else {
       const parts = turn.results.map((r) =>
-        createPartFromFunctionResponse(r.toolCallId, r.name, { output: r.content }),
+        createPartFromFunctionResponse(r.toolCallId, r.name, {
+          output: r.content,
+        }),
       );
       contents.push(createUserContent(parts));
     }
@@ -76,11 +83,18 @@ export class GeminiChatProvider implements ChatProvider {
     this.client = new GoogleGenAI({ apiKey: config.googleApiKey });
   }
 
-  async complete(req: ChatRequest, signal?: AbortSignal): Promise<ChatCompletion> {
+  async complete(
+    req: ChatRequest,
+    signal?: AbortSignal,
+  ): Promise<ChatCompletion> {
     const response = await this.client.models.generateContent({
       model: MODEL_ID,
       contents: req.user,
-      config: { systemInstruction: req.system, abortSignal: signal, maxOutputTokens: req.maxTokens },
+      config: {
+        systemInstruction: req.system,
+        abortSignal: signal,
+        maxOutputTokens: req.maxTokens,
+      },
     });
 
     return {
@@ -93,7 +107,10 @@ export class GeminiChatProvider implements ChatProvider {
     };
   }
 
-  async *stream(req: ChatRequest, signal?: AbortSignal): AsyncIterable<ChatEvent> {
+  async *stream(
+    req: ChatRequest,
+    signal?: AbortSignal,
+  ): AsyncIterable<ChatEvent> {
     const stream = await this.client.models.generateContentStream({
       model: MODEL_ID,
       contents: buildContents(req),
@@ -101,7 +118,9 @@ export class GeminiChatProvider implements ChatProvider {
         systemInstruction: req.system,
         abortSignal: signal,
         maxOutputTokens: req.maxTokens,
-        tools: req.tools?.length ? [{ functionDeclarations: req.tools.map(toFunctionDeclaration) }] : undefined,
+        tools: req.tools?.length
+          ? [{ functionDeclarations: req.tools.map(toFunctionDeclaration) }]
+          : undefined,
       },
     });
 
@@ -123,7 +142,8 @@ export class GeminiChatProvider implements ChatProvider {
         // fallback — `call.id` is usually absent for a single, non-parallel
         // call, and a fresh `randomUUID()` per line would make the dedup a
         // no-op if the same part is ever re-emitted across chunks.
-        const dedupeKey = call.id ?? `${call.name ?? ''}:${JSON.stringify(call.args ?? {})}`;
+        const dedupeKey =
+          call.id ?? `${call.name ?? ''}:${JSON.stringify(call.args ?? {})}`;
         if (seenCalls.has(dedupeKey)) continue;
         seenCalls.add(dedupeKey);
         yield {
@@ -144,10 +164,15 @@ export class GeminiChatProvider implements ChatProvider {
       // in a function call — never let it downgrade a 'tool_use' we already
       // detected above.
       const finishReason = chunk.candidates?.[0]?.finishReason;
-      if (finishReason && stopReason !== 'tool_use') stopReason = toStopReason(finishReason);
+      if (finishReason && stopReason !== 'tool_use')
+        stopReason = toStopReason(finishReason);
     }
 
-    yield { type: 'usage', inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 };
+    yield {
+      type: 'usage',
+      inputTokens: inputTokens ?? 0,
+      outputTokens: outputTokens ?? 0,
+    };
     yield { type: 'done', stopReason, servedBy: this.id };
   }
 }

@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ArrayMinSize, IsArray, IsIn, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 
 export class ConversationDto {
   @ApiProperty()
@@ -27,7 +35,11 @@ export class ConversationDto {
 }
 
 export class CreateMultiConversationDto {
-  @ApiProperty({ type: String, isArray: true, description: 'At least 2 distinct, already-indexed project ids' })
+  @ApiProperty({
+    type: String,
+    isArray: true,
+    description: 'At least 2 distinct, already-indexed project ids',
+  })
   @IsArray()
   @ArrayMinSize(2)
   @IsUUID('4', { each: true })
@@ -35,7 +47,9 @@ export class CreateMultiConversationDto {
 }
 
 export class CitationDto {
-  @ApiProperty({ description: '1-based marker as it appears in the answer text, e.g. [1]' })
+  @ApiProperty({
+    description: '1-based marker as it appears in the answer text, e.g. [1]',
+  })
   marker!: number;
 
   @ApiProperty()
@@ -50,7 +64,8 @@ export class CitationDto {
   @ApiPropertyOptional({
     type: String,
     nullable: true,
-    description: 'Which project this came from — only set for a multi-project conversation',
+    description:
+      'Which project this came from — only set for a multi-project conversation',
   })
   projectId?: string | null;
 
@@ -60,7 +75,9 @@ export class CitationDto {
   @ApiProperty({ nullable: true, type: Number })
   retrievalRank!: number | null;
 
-  @ApiProperty({ description: 'Whether the model actually cited this retrieved chunk' })
+  @ApiProperty({
+    description: 'Whether the model actually cited this retrieved chunk',
+  })
   used!: boolean;
 }
 
@@ -83,7 +100,11 @@ export class MessageDto {
   @ApiProperty({ nullable: true, type: String })
   error!: string | null;
 
-  @ApiProperty({ type: CitationDto, isArray: true, description: 'Every retrieved chunk, cited or not' })
+  @ApiProperty({
+    type: CitationDto,
+    isArray: true,
+    description: 'Every retrieved chunk, cited or not',
+  })
   citations!: CitationDto[];
 
   @ApiProperty()

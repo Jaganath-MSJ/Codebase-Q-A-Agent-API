@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildSearchText, extractIdentifierTokens, splitIdentifiers } from './identifiers';
+import {
+  buildSearchText,
+  extractIdentifierTokens,
+  splitIdentifiers,
+} from './identifiers';
 
 describe('splitIdentifiers', () => {
   it('splits camelCase', () => {
@@ -28,7 +32,9 @@ describe('splitIdentifiers', () => {
   });
 
   it('tokenizes across punctuation and whitespace in real code', () => {
-    expect(splitIdentifiers('user.findUserByEmail(email)')).toBe('user find User By Email email');
+    expect(splitIdentifiers('user.findUserByEmail(email)')).toBe(
+      'user find User By Email email',
+    );
   });
 });
 
@@ -42,15 +48,21 @@ describe('buildSearchText', () => {
 
 describe('extractIdentifierTokens', () => {
   it('catches a camelCase identifier', () => {
-    expect(extractIdentifierTokens('Where is getUserByEmail defined?')).toEqual(['getUserByEmail']);
+    expect(extractIdentifierTokens('Where is getUserByEmail defined?')).toEqual(
+      ['getUserByEmail'],
+    );
   });
 
   it('catches a SCREAMING_SNAKE_CASE constant', () => {
-    expect(extractIdentifierTokens('Where is RATE_LIMIT_MS configured?')).toEqual(['RATE_LIMIT_MS']);
+    expect(
+      extractIdentifierTokens('Where is RATE_LIMIT_MS configured?'),
+    ).toEqual(['RATE_LIMIT_MS']);
   });
 
   it('catches a method-call shape', () => {
-    expect(extractIdentifierTokens('What calls service.method(?')).toEqual(['service.method(']);
+    expect(extractIdentifierTokens('What calls service.method(?')).toEqual([
+      'service.method(',
+    ]);
   });
 
   it('is empty for a purely conceptual question', () => {
@@ -58,8 +70,8 @@ describe('extractIdentifierTokens', () => {
   });
 
   it('deduplicates repeated tokens', () => {
-    expect(extractIdentifierTokens('getUserByEmail calls getUserByEmail again')).toEqual([
-      'getUserByEmail',
-    ]);
+    expect(
+      extractIdentifierTokens('getUserByEmail calls getUserByEmail again'),
+    ).toEqual(['getUserByEmail']);
   });
 });

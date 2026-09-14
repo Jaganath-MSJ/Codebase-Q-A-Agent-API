@@ -20,7 +20,9 @@ export type Env = z.infer<typeof envSchema>;
 export function validateEnv(config: Record<string, unknown>): Env {
   const result = envSchema.safeParse(config);
   if (!result.success) {
-    throw new Error(`Invalid environment configuration:\n${result.error.toString()}`);
+    throw new Error(
+      `Invalid environment configuration:\n${result.error.toString()}`,
+    );
   }
   return result.data;
 }

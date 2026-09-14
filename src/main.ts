@@ -10,7 +10,9 @@ import { AppModule } from './app.module';
 // the process alive rather than exiting on Node's default.
 const processLogger = new Logger('Process');
 process.on('unhandledRejection', (reason) => {
-  processLogger.error(`Unhandled promise rejection: ${reason instanceof Error ? reason.stack : String(reason)}`);
+  processLogger.error(
+    `Unhandled promise rejection: ${reason instanceof Error ? reason.stack : String(reason)}`,
+  );
 });
 
 async function bootstrap() {
@@ -23,7 +25,10 @@ async function bootstrap() {
     compression({
       filter: (req, res) => {
         const contentType = res.getHeader('Content-Type');
-        if (typeof contentType === 'string' && contentType.includes('text/event-stream')) {
+        if (
+          typeof contentType === 'string' &&
+          contentType.includes('text/event-stream')
+        ) {
           return false;
         }
         return compression.filter(req, res);
@@ -32,7 +37,13 @@ async function bootstrap() {
   );
 
   app.setGlobalPrefix('api');
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
 
   const config = new DocumentBuilder()
     .setTitle('Codebase Q&A Agent API')
@@ -44,4 +55,4 @@ async function bootstrap() {
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
 }
-bootstrap();
+void bootstrap();

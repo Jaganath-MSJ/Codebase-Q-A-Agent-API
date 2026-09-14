@@ -102,7 +102,9 @@ export const projects = pgTable(
     chunkCount: integer('chunk_count').notNull().default(0),
     embeddingModel: text('embedding_model'),
     embeddingDim: integer('embedding_dim'),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (table) => [
     check(
@@ -158,7 +160,9 @@ export const chunks = pgTable(
     // Chunk content plus its identifier-split form (see retrieval/identifiers.ts) —
     // lets a plain-English query like "user email" match `getUserByEmail`.
     searchText: text('search_text').notNull().default(''),
-    tsv: tsvector('tsv').generatedAlwaysAs(sql`to_tsvector('simple', search_text)`),
+    tsv: tsvector('tsv').generatedAlwaysAs(
+      sql`to_tsvector('simple', search_text)`,
+    ),
   },
   (table) => [
     unique().on(table.fileId, table.ord),
@@ -196,7 +200,10 @@ export const indexingJobs = pgTable(
     filesTotal: integer('files_total').notNull().default(0),
     filesDone: integer('files_done').notNull().default(0),
     filesSkipped: integer('files_skipped').notNull().default(0),
-    skipReasons: jsonb('skip_reasons').notNull().default({}).$type<Record<string, number>>(),
+    skipReasons: jsonb('skip_reasons')
+      .notNull()
+      .default({})
+      .$type<Record<string, number>>(),
     chunksTotal: integer('chunks_total').notNull().default(0),
     chunksEmbedded: integer('chunks_embedded').notNull().default(0),
     embedRequests: integer('embed_requests').notNull().default(0),
@@ -208,7 +215,9 @@ export const indexingJobs = pgTable(
     errorMessage: text('error_message'),
     startedAt: timestamp('started_at', { withTimezone: true }),
     finishedAt: timestamp('finished_at', { withTimezone: true }),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (table) => [
     check(
@@ -224,7 +233,10 @@ export const indexingJobs = pgTable(
     // recency with no status filter, so neither the (status, created_at) index
     // nor the partial one_active_job_per_project index below can serve them —
     // both fell back to a full scan on every SSE poll tick and dashboard load.
-    index('indexing_jobs_project_id_created_idx').on(table.projectId, table.createdAt),
+    index('indexing_jobs_project_id_created_idx').on(
+      table.projectId,
+      table.createdAt,
+    ),
     uniqueIndex('one_active_job_per_project')
       .on(table.projectId)
       .where(sql`${table.status} IN ('queued','running','paused')`),
@@ -252,8 +264,12 @@ export const conversations = pgTable('conversations', {
   // assistant message already folded in and never needs re-summarizing.
   summary: text('summary'),
   summarizedThroughMsgId: uuid('summarized_through_msg_id'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
 
 export type ConversationRow = typeof conversations.$inferSelect;
@@ -283,7 +299,8 @@ export const conversationProjects = pgTable(
 );
 
 export type ConversationProjectRow = typeof conversationProjects.$inferSelect;
-export type NewConversationProjectRow = typeof conversationProjects.$inferInsert;
+export type NewConversationProjectRow =
+  typeof conversationProjects.$inferInsert;
 
 export const messages = pgTable(
   'messages',
@@ -307,7 +324,9 @@ export const messages = pgTable(
     // Phase 7: the full agent-loop trajectory — [{tool, args, resultSummary, ms}] — null for RAG answers.
     toolTrace: jsonb('tool_trace'),
     error: text('error'),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (table) => [
     check('messages_role_check', sql`${table.role} IN ('user','assistant')`),
@@ -315,7 +334,10 @@ export const messages = pgTable(
       'messages_status_check',
       sql`${table.status} IN ('pending','streaming','complete','error')`,
     ),
-    index('messages_conversation_created_idx').on(table.conversationId, table.createdAt),
+    index('messages_conversation_created_idx').on(
+      table.conversationId,
+      table.createdAt,
+    ),
   ],
 );
 
@@ -330,13 +352,17 @@ export const citations = pgTable(
       .notNull()
       .references(() => messages.id, { onDelete: 'cascade' }),
     marker: integer('marker').notNull(),
-    chunkId: uuid('chunk_id').references(() => chunks.id, { onDelete: 'set null' }),
+    chunkId: uuid('chunk_id').references(() => chunks.id, {
+      onDelete: 'set null',
+    }),
     // Denormalized, like filePath/startLine/endLine below — set only for a
     // multi-project conversation's citations, so the UI can show which
     // project a result came from. Null for every ordinary single-project
     // conversation's citations (the project is already implied by the
     // conversation itself there, so it would be redundant on every row).
-    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
+    projectId: uuid('project_id').references(() => projects.id, {
+      onDelete: 'set null',
+    }),
     // Denormalized snapshot: survives re-indexing, so old conversations keep
     // readable citations even after the live chunk row is gone.
     filePath: text('file_path').notNull(),
@@ -371,10 +397,15 @@ export const sourceCredentials = pgTable(
     iv: bytea('iv').notNull(),
     authTag: bytea('auth_tag').notNull(),
     keyVersion: integer('key_version').notNull().default(1),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (table) => [
-    check('source_credentials_kind_check', sql`${table.kind} IN ('github_pat')`),
+    check(
+      'source_credentials_kind_check',
+      sql`${table.kind} IN ('github_pat')`,
+    ),
     // One credential per project — "re-entering a token replaces the row
     // rather than adding a second one" (upserted by CredentialsRepository).
     unique().on(table.projectId),

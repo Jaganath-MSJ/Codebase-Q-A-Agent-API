@@ -13,7 +13,11 @@ declare module 'yazl' {
 
   export class ZipFile {
     outputStream: Readable;
-    addBuffer(buffer: Buffer, metadataPath: string, options?: YazlEntryOptions): void;
+    addBuffer(
+      buffer: Buffer,
+      metadataPath: string,
+      options?: YazlEntryOptions,
+    ): void;
     addEmptyDirectory(metadataPath: string, options?: YazlEntryOptions): void;
     end(): void;
   }

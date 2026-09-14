@@ -25,12 +25,17 @@ export class ConversationProjectsRepository {
   }
 
   /** Batched form of `findProjectIds` for a whole conversation list — one query, not N. A conversation absent from the returned map has no rows (ordinary single-project). */
-  async findProjectIdsForConversations(conversationIds: string[]): Promise<Map<string, string[]>> {
+  async findProjectIdsForConversations(
+    conversationIds: string[],
+  ): Promise<Map<string, string[]>> {
     const map = new Map<string, string[]>();
     if (conversationIds.length === 0) return map;
 
     const rows = await this.db
-      .select({ conversationId: conversationProjects.conversationId, projectId: conversationProjects.projectId })
+      .select({
+        conversationId: conversationProjects.conversationId,
+        projectId: conversationProjects.projectId,
+      })
       .from(conversationProjects)
       .where(inArray(conversationProjects.conversationId, conversationIds));
 

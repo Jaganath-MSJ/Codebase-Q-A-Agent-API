@@ -22,23 +22,37 @@ export class TrigramRetriever {
    * best-matching substring of `text`, which is what "does this chunk
    * contain something like this identifier" actually means.
    */
-  async search(projectId: string, probe: string, limit = 25): Promise<ScoredChunk[]> {
-    return this.db
-      .select({
-        chunkId: chunks.id,
-        path: files.path,
-        startLine: chunks.startLine,
-        endLine: chunks.endLine,
-        content: chunks.content,
-        contentHash: chunks.contentHash,
-        symbol: chunks.symbol,
-        score: sql<number>`word_similarity(${probe}, ${chunks.searchText})`,
-      })
-      .from(chunks)
-      .innerJoin(files, eq(files.id, chunks.fileId))
-      .where(and(eq(chunks.projectId, projectId), sql`${probe} <% ${chunks.searchText}`))
-      // Secondary key: see the same comment in vector.retriever.ts.
-      .orderBy(sql`word_similarity(${probe}, ${chunks.searchText}) desc`, chunks.id)
-      .limit(limit);
+  async search(
+    projectId: string,
+    probe: string,
+    limit = 25,
+  ): Promise<ScoredChunk[]> {
+    return (
+      this.db
+        .select({
+          chunkId: chunks.id,
+          path: files.path,
+          startLine: chunks.startLine,
+          endLine: chunks.endLine,
+          content: chunks.content,
+          contentHash: chunks.contentHash,
+          symbol: chunks.symbol,
+          score: sql<number>`word_similarity(${probe}, ${chunks.searchText})`,
+        })
+        .from(chunks)
+        .innerJoin(files, eq(files.id, chunks.fileId))
+        .where(
+          and(
+            eq(chunks.projectId, projectId),
+            sql`${probe} <% ${chunks.searchText}`,
+          ),
+        )
+        // Secondary key: see the same comment in vector.retriever.ts.
+        .orderBy(
+          sql`word_similarity(${probe}, ${chunks.searchText}) desc`,
+          chunks.id,
+        )
+        .limit(limit)
+    );
   }
 }

@@ -3,7 +3,8 @@ import { IsBoolean, IsOptional } from 'class-validator';
 
 export class IndexRequestDto {
   @ApiPropertyOptional({
-    description: 'Bypass the revision early-exit and re-walk even if nothing changed',
+    description:
+      'Bypass the revision early-exit and re-walk even if nothing changed',
     default: false,
   })
   @IsOptional()
@@ -18,7 +19,9 @@ export class JobDto {
   @ApiProperty()
   projectId!: string;
 
-  @ApiProperty({ enum: ['queued', 'running', 'succeeded', 'failed', 'canceled', 'paused'] })
+  @ApiProperty({
+    enum: ['queued', 'running', 'succeeded', 'failed', 'canceled', 'paused'],
+  })
   status!: string;
 
   @ApiProperty({

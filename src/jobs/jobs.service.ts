@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { JobsRepository } from '../db/repositories/jobs.repository';
 import { ProjectsRepository } from '../db/repositories/projects.repository';
 import { EventBusService } from '../events/event-bus.service';
@@ -22,7 +26,10 @@ export class JobsService {
     private readonly eventBus: EventBusService,
   ) {}
 
-  async enqueue(projectId: string, trigger = 'initial'): Promise<IndexingJobRow> {
+  async enqueue(
+    projectId: string,
+    trigger = 'initial',
+  ): Promise<IndexingJobRow> {
     const project = await this.projectsRepository.findById(projectId);
     if (!project) throw new NotFoundException(`Project ${projectId} not found`);
 
@@ -32,7 +39,9 @@ export class JobsService {
       return job;
     } catch (err) {
       if (isUniqueViolation(err)) {
-        throw new ConflictException(`Project ${projectId} already has an active indexing job`);
+        throw new ConflictException(
+          `Project ${projectId} already has an active indexing job`,
+        );
       }
       throw err;
     }
@@ -43,7 +52,9 @@ export class JobsService {
   }
 
   /** Latest job per project, keyed by projectId — one query for the whole list (Phase 12.16). */
-  async findLatestForProjects(projectIds: string[]): Promise<Map<string, IndexingJobRow>> {
+  async findLatestForProjects(
+    projectIds: string[],
+  ): Promise<Map<string, IndexingJobRow>> {
     const rows = await this.jobsRepository.findLatestByProjectIds(projectIds);
     return new Map(rows.map((row) => [row.projectId, row]));
   }

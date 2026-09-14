@@ -18,7 +18,10 @@ export class ReferencesRetriever {
    * becomes one whole lexeme; this cannot confuse it with, say,
    * `revalidateUserToken` the way a plain substring search would.
    */
-  async findReferences(projectId: string, symbol: string): Promise<ScoredChunk[]> {
+  async findReferences(
+    projectId: string,
+    symbol: string,
+  ): Promise<ScoredChunk[]> {
     const tsQuery = sql`plainto_tsquery('simple', ${symbol})`;
 
     return this.db
@@ -34,7 +37,9 @@ export class ReferencesRetriever {
       })
       .from(chunks)
       .innerJoin(files, eq(files.id, chunks.fileId))
-      .where(and(eq(chunks.projectId, projectId), sql`${chunks.tsv} @@ ${tsQuery}`))
+      .where(
+        and(eq(chunks.projectId, projectId), sql`${chunks.tsv} @@ ${tsQuery}`),
+      )
       .orderBy(files.path, chunks.startLine, chunks.id)
       .limit(MAX_RESULTS);
   }

@@ -38,7 +38,12 @@ export class MessagesRepository {
     return this.db.transaction(async (tx) => {
       const [userMessage] = await tx
         .insert(messages)
-        .values({ conversationId, role: 'user', content: userContent, status: 'complete' })
+        .values({
+          conversationId,
+          role: 'user',
+          content: userContent,
+          status: 'complete',
+        })
         .returning();
       if (!userMessage) throw new Error('Insert returned no row');
 
@@ -59,12 +64,18 @@ export class MessagesRepository {
   }
 
   async markStreaming(id: string): Promise<void> {
-    await this.db.update(messages).set({ status: 'streaming' }).where(eq(messages.id, id));
+    await this.db
+      .update(messages)
+      .set({ status: 'streaming' })
+      .where(eq(messages.id, id));
   }
 
   /** The condensed standalone query actually searched — set on every turn, even an uncondensed first one. */
   async setRetrievalQuery(id: string, retrievalQuery: string): Promise<void> {
-    await this.db.update(messages).set({ retrievalQuery }).where(eq(messages.id, id));
+    await this.db
+      .update(messages)
+      .set({ retrievalQuery })
+      .where(eq(messages.id, id));
   }
 
   /** Periodic flush of the in-progress answer, so a dropped connection leaves a partial row, not nothing. */
@@ -72,12 +83,21 @@ export class MessagesRepository {
     await this.db.update(messages).set({ content }).where(eq(messages.id, id));
   }
 
-  async completeAssistant(id: string, data: CompleteAssistantData): Promise<void> {
-    await this.db.update(messages).set({ ...data, status: 'complete' }).where(eq(messages.id, id));
+  async completeAssistant(
+    id: string,
+    data: CompleteAssistantData,
+  ): Promise<void> {
+    await this.db
+      .update(messages)
+      .set({ ...data, status: 'complete' })
+      .where(eq(messages.id, id));
   }
 
   async markError(id: string, content: string, error: string): Promise<void> {
-    await this.db.update(messages).set({ content, status: 'error', error }).where(eq(messages.id, id));
+    await this.db
+      .update(messages)
+      .set({ content, status: 'error', error })
+      .where(eq(messages.id, id));
   }
 
   async findAllByConversation(conversationId: string): Promise<MessageRow[]> {
@@ -98,7 +118,10 @@ export class MessagesRepository {
    * back to the whole history if the watermark row is missing (shouldn't happen —
    * it's an assistant id this service wrote).
    */
-  async findAfterMessage(conversationId: string, afterMessageId: string): Promise<MessageRow[]> {
+  async findAfterMessage(
+    conversationId: string,
+    afterMessageId: string,
+  ): Promise<MessageRow[]> {
     const [watermark] = await this.db
       .select({ createdAt: messages.createdAt })
       .from(messages)
@@ -107,7 +130,12 @@ export class MessagesRepository {
     return this.db
       .select()
       .from(messages)
-      .where(and(eq(messages.conversationId, conversationId), gt(messages.createdAt, watermark.createdAt)))
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          gt(messages.createdAt, watermark.createdAt),
+        ),
+      )
       .orderBy(asc(messages.createdAt), asc(messages.id));
   }
 }

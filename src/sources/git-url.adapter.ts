@@ -13,7 +13,11 @@ import {
   resolveDefaultBranch,
   SAFE_BRANCH_RE,
 } from './git-clone';
-import type { MaterializeResult, SourceAdapter, SourceKind } from './source-adapter.interface';
+import type {
+  MaterializeResult,
+  SourceAdapter,
+  SourceKind,
+} from './source-adapter.interface';
 
 @Injectable()
 export class GitUrlAdapter implements SourceAdapter {
@@ -40,7 +44,9 @@ export class GitUrlAdapter implements SourceAdapter {
     let branch = project.defaultBranch;
     if (!branch) {
       branch = await resolveDefaultBranch(url);
-      await this.projectsRepository.update(project.id, { defaultBranch: branch });
+      await this.projectsRepository.update(project.id, {
+        defaultBranch: branch,
+      });
     }
     if (!SAFE_BRANCH_RE.test(branch)) {
       throw new BadRequestException(`Not a valid branch name: ${branch}`);

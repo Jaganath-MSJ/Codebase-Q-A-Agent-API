@@ -62,7 +62,11 @@ function twoSegmentDir(relPath: string): string | null {
   return segments.slice(0, Math.min(2, segments.length - 1)).join('/');
 }
 
-function resolveRelativeImport(fromDir: string, specifier: string, known: Set<string>): string | null {
+function resolveRelativeImport(
+  fromDir: string,
+  specifier: string,
+  known: Set<string>,
+): string | null {
   const base = path.posix.normalize(path.posix.join(fromDir, specifier));
   const candidates = [
     base,
@@ -78,7 +82,9 @@ function resolveRelativeImport(fromDir: string, specifier: string, known: Set<st
 }
 
 /** How many other files, in this same set, import each file — a heuristic fan-in signal, not exact. */
-export function countInboundImports(files: RankableFile[]): Map<string, number> {
+export function countInboundImports(
+  files: RankableFile[],
+): Map<string, number> {
   const known = new Set(files.map((f) => f.path));
   const counts = new Map<string, number>();
 
@@ -95,10 +101,15 @@ export function countInboundImports(files: RankableFile[]): Map<string, number> 
   return counts;
 }
 
-export function scoreFile(file: RankableFile, importCount: number, sameDirCount: number): number {
+export function scoreFile(
+  file: RankableFile,
+  importCount: number,
+  sameDirCount: number,
+): number {
   let score = 0;
   if (isEntryPoint(file.path)) score += ENTRY_POINT_BONUS;
-  if (isDocFile(file.path)) score += isRootLevel(file.path) ? ROOT_DOC_BONUS : NESTED_DOC_BONUS;
+  if (isDocFile(file.path))
+    score += isRootLevel(file.path) ? ROOT_DOC_BONUS : NESTED_DOC_BONUS;
   if (isConfigFile(file.path)) score += CONFIG_BONUS;
   score += Math.min(importCount * IMPORT_WEIGHT, MAX_IMPORT_BONUS);
   score += Math.min(sameDirCount * SAME_DIR_WEIGHT, MAX_DIR_BONUS);
@@ -119,7 +130,11 @@ export function rankFiles(files: RankableFile[], limit: number): string[] {
     const dir = twoSegmentDir(file.path);
     return {
       path: file.path,
-      score: scoreFile(file, importCounts.get(file.path) ?? 0, dir ? (dirCounts.get(dir) ?? 0) : 0),
+      score: scoreFile(
+        file,
+        importCounts.get(file.path) ?? 0,
+        dir ? (dirCounts.get(dir) ?? 0) : 0,
+      ),
     };
   });
 

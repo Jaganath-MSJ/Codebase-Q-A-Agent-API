@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { existsSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import * as path from 'node:path';
@@ -6,7 +10,11 @@ import { resolveUploadPath } from '../common/upload-id';
 import { ConfigService } from '../config/config.service';
 import type { ProjectRow } from '../db/schema';
 import { hashWorkspaceContentTree } from './content-tree-hash';
-import type { MaterializeResult, SourceAdapter, SourceKind } from './source-adapter.interface';
+import type {
+  MaterializeResult,
+  SourceAdapter,
+  SourceKind,
+} from './source-adapter.interface';
 import { extractZipSafely } from './zip-extractor';
 
 @Injectable()
@@ -29,9 +37,14 @@ export class ZipUploadAdapter implements SourceAdapter {
     if (!existsSync(workspacePath)) {
       let uploadPath: string;
       try {
-        uploadPath = resolveUploadPath(path.join(this.config.dataDir, 'uploads'), project.sourceRef);
+        uploadPath = resolveUploadPath(
+          path.join(this.config.dataDir, 'uploads'),
+          project.sourceRef,
+        );
       } catch {
-        throw new BadRequestException(`Not a valid uploadId: ${project.sourceRef}`);
+        throw new BadRequestException(
+          `Not a valid uploadId: ${project.sourceRef}`,
+        );
       }
       if (!existsSync(uploadPath)) {
         throw new NotFoundException(

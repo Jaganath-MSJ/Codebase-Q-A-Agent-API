@@ -1,6 +1,14 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { JobsRepository } from '../db/repositories/jobs.repository';
-import { IndexCanceledError, IndexingService } from '../indexing/indexing.service';
+import {
+  IndexCanceledError,
+  IndexingService,
+} from '../indexing/indexing.service';
 import { ProgressReporter } from '../indexing/progress.reporter';
 import { EmbeddingQuotaExhaustedError } from '../indexing/rate-limiter';
 import { EventBusService } from '../events/event-bus.service';
@@ -97,19 +105,30 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
     } finally {
       clearInterval(heartbeat);
     }
-    this.eventBus.emit({ type: 'job.completed', projectId: job.projectId, jobId: job.id });
+    this.eventBus.emit({
+      type: 'job.completed',
+      projectId: job.projectId,
+      jobId: job.id,
+    });
     return outcome;
   }
 
-  private async recordFailure(job: IndexingJobRow, err: unknown): Promise<'done' | 'paused'> {
+  private async recordFailure(
+    job: IndexingJobRow,
+    err: unknown,
+  ): Promise<'done' | 'paused'> {
     if (err instanceof IndexCanceledError) {
-      this.logger.log(`Job ${job.id} for project ${job.projectId} canceled: ${err.message}`);
+      this.logger.log(
+        `Job ${job.id} for project ${job.projectId} canceled: ${err.message}`,
+      );
       await this.jobsRepository.markCanceled(job.id);
       return 'done';
     }
 
     if (err instanceof EmbeddingQuotaExhaustedError) {
-      this.logger.warn(`Job ${job.id} for project ${job.projectId} paused: ${err.message}`);
+      this.logger.warn(
+        `Job ${job.id} for project ${job.projectId} paused: ${err.message}`,
+      );
       await this.jobsRepository.markPaused(job.id, err.message);
       return 'paused';
     }
@@ -121,7 +140,9 @@ export class WorkerService implements OnModuleInit, OnModuleDestroy {
     // subprocess echoing a bad credential in its error text) far more often than
     // through deliberate logging — redacted before it's ever logged or persisted.
     const message = redactSecrets(rawMessage.split(NUL_BYTE).join(''));
-    this.logger.error(`Job ${job.id} for project ${job.projectId} failed: ${message}`);
+    this.logger.error(
+      `Job ${job.id} for project ${job.projectId} failed: ${message}`,
+    );
     try {
       await this.jobsRepository.markFailed(job.id, message);
     } catch (markErr) {

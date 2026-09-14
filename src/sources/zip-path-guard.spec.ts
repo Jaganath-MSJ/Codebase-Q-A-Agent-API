@@ -20,7 +20,14 @@ describe('assertSafeZipEntryPath', () => {
     expect(() => assertSafeZipEntryPath(entryName)).toThrow(ZipSlipError);
   });
 
-  const accepted = ['src/index.ts', 'a/b/c.txt', 'README.md', 'a/b/', '..hidden/file.txt', 'a..b/c'];
+  const accepted = [
+    'src/index.ts',
+    'a/b/c.txt',
+    'README.md',
+    'a/b/',
+    '..hidden/file.txt',
+    'a..b/c',
+  ];
 
   it.each(accepted)('accepts %s', (entryName) => {
     expect(() => assertSafeZipEntryPath(entryName)).not.toThrow();

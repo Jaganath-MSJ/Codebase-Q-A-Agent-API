@@ -11,7 +11,7 @@ function inner(complete: ReturnType<typeof vi.fn>): ChatProvider {
     contextWindow: 1000,
     supportsTools: true,
     complete,
-    // eslint-disable-next-line require-yield
+
     stream: async function* () {
       throw new Error('unused');
     },
@@ -23,7 +23,10 @@ const BASE: ChatRequest = { system: 's', user: 'u' };
 describe('CachingChatProvider cache key (complete)', () => {
   const dirs: string[] = [];
   const tmp = (): string => {
-    const d = path.join(os.tmpdir(), `llm-cache-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    const d = path.join(
+      os.tmpdir(),
+      `llm-cache-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
     dirs.push(d);
     return d;
   };

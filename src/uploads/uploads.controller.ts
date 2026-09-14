@@ -9,7 +9,12 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBody, ApiConsumes, ApiCreatedResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBody,
+  ApiConsumes,
+  ApiCreatedResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import * as path from 'node:path';
 import { UploadResultDto } from '../contracts';
 import { MulterErrorFilter } from './multer-error.filter';
@@ -28,7 +33,12 @@ export class UploadsController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiConsumes('multipart/form-data')
-  @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
   @ApiCreatedResponse({ type: UploadResultDto })
   @UseFilters(MulterErrorFilter)
   @UseInterceptors(
@@ -43,7 +53,13 @@ export class UploadsController {
     }),
   )
   upload(@UploadedFile() file?: Express.Multer.File): UploadResultDto {
-    if (!file) throw new BadRequestException('No file uploaded (expected multipart field "file")');
-    return { uploadId: path.basename(file.filename, '.zip'), sizeBytes: file.size };
+    if (!file)
+      throw new BadRequestException(
+        'No file uploaded (expected multipart field "file")',
+      );
+    return {
+      uploadId: path.basename(file.filename, '.zip'),
+      sizeBytes: file.size,
+    };
   }
 }

@@ -1,10 +1,19 @@
-import { ConflictException, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
 import { CredentialsService } from '../credentials/credentials.service';
 import { ProjectsRepository } from '../db/repositories/projects.repository';
 import type { ProjectRow } from '../db/schema';
 import { JobsService } from './jobs.service';
-import { ASKPASS_TOKEN_ENV_VAR, ensureAskpassScript } from '../sources/git-askpass';
+import {
+  ASKPASS_TOKEN_ENV_VAR,
+  ensureAskpassScript,
+} from '../sources/git-askpass';
 import { remoteHeadSha, type GitEnv } from '../sources/git-clone';
 import { redactSecrets } from '../common/redact';
 
@@ -61,7 +70,9 @@ export class GitPollService implements OnModuleInit, OnModuleDestroy {
     }
 
     const qualifying = projects.filter(
-      (p) => (p.sourceKind === 'git_url' || p.sourceKind === 'git_private') && p.headRevision !== null,
+      (p) =>
+        (p.sourceKind === 'git_url' || p.sourceKind === 'git_private') &&
+        p.headRevision !== null,
     );
 
     for (const project of qualifying) {
@@ -88,15 +99,25 @@ export class GitPollService implements OnModuleInit, OnModuleDestroy {
       const token = await this.credentialsService.getToken(project.id);
       if (!token) return; // shouldn't happen for a project that indexed successfully, but don't crash if it does
       const askpassPath = await ensureAskpassScript(this.config.dataDir);
-      env = { GIT_ASKPASS: askpassPath, [ASKPASS_TOKEN_ENV_VAR]: token, GIT_TERMINAL_PROMPT: '0' };
+      env = {
+        GIT_ASKPASS: askpassPath,
+        [ASKPASS_TOKEN_ENV_VAR]: token,
+        GIT_TERMINAL_PROMPT: '0',
+      };
     }
 
-    const remoteSha = await remoteHeadSha(project.sourceRef, project.defaultBranch, env);
+    const remoteSha = await remoteHeadSha(
+      project.sourceRef,
+      project.defaultBranch,
+      env,
+    );
     if (!remoteSha || remoteSha === project.headRevision) return;
 
     try {
       await this.jobsService.enqueue(project.id, 'git-poll');
-      this.logger.log(`Remote head moved for project '${project.name}' — enqueued re-index`);
+      this.logger.log(
+        `Remote head moved for project '${project.name}' — enqueued re-index`,
+      );
     } catch (err) {
       // Already has an active job — the next poll after it finishes will
       // notice the same move if this job doesn't already cover it.

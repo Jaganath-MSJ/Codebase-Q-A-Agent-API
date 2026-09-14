@@ -32,7 +32,9 @@ function assertPartition(lengths: number[], batches: number[][]): void {
   for (const batch of batches) {
     const maxLen = Math.max(...batch.map((i) => Math.max(1, lengths[i]!)));
     // The memory invariant: padded cost never exceeds the flat-4-at-ceiling budget.
-    expect(batch.length * maxLen * maxLen).toBeLessThanOrEqual(SUBBATCH_PADDED_BUDGET);
+    expect(batch.length * maxLen * maxLen).toBeLessThanOrEqual(
+      SUBBATCH_PADDED_BUDGET,
+    );
   }
 }
 
@@ -53,7 +55,9 @@ describe('planLengthBucketedBatches', () => {
   });
 
   it('keeps the memory invariant on a mixed distribution', () => {
-    const lengths = [50, 4500, 100, 4500, 300, 80, 2000, 4500, 120, 60, 900, 4500];
+    const lengths = [
+      50, 4500, 100, 4500, 300, 80, 2000, 4500, 120, 60, 900, 4500,
+    ];
     assertPartition(lengths, planLengthBucketedBatches(lengths));
   });
 

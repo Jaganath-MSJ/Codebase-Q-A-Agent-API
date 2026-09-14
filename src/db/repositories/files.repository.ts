@@ -21,7 +21,11 @@ export class FilesRepository {
 
   async findAllByProjectId(projectId: string): Promise<ExistingFile[]> {
     return this.db
-      .select({ id: files.id, path: files.path, contentHash: files.contentHash })
+      .select({
+        id: files.id,
+        path: files.path,
+        contentHash: files.contentHash,
+      })
       .from(files)
       .where(eq(files.projectId, projectId));
   }
@@ -53,12 +57,17 @@ export class FilesRepository {
         .insert(files)
         .values({ ...file, projectId })
         .returning();
-      if (!fileRow) throw new Error(`Failed to insert file row for ${file.path}`);
+      if (!fileRow)
+        throw new Error(`Failed to insert file row for ${file.path}`);
 
       if (chunkRows.length > 0) {
-        await tx
-          .insert(chunks)
-          .values(chunkRows.map((chunk) => ({ ...chunk, projectId, fileId: fileRow.id })));
+        await tx.insert(chunks).values(
+          chunkRows.map((chunk) => ({
+            ...chunk,
+            projectId,
+            fileId: fileRow.id,
+          })),
+        );
       }
 
       return fileRow;

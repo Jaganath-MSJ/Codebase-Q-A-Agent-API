@@ -1,4 +1,10 @@
-import { Controller, MessageEvent, Param, ParseUUIDPipe, Sse } from '@nestjs/common';
+import {
+  Controller,
+  MessageEvent,
+  Param,
+  ParseUUIDPipe,
+  Sse,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { from, interval, merge, Observable } from 'rxjs';
 import { auditTime, concatMap, filter, map } from 'rxjs/operators';
@@ -17,7 +23,9 @@ export class ProgressController {
   ) {}
 
   @Sse()
-  stream(@Param('projectId', ParseUUIDPipe) projectId: string): Observable<MessageEvent> {
+  stream(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+  ): Observable<MessageEvent> {
     const snapshot$ = this.fetchEvent(projectId, 'snapshot');
 
     const live$ = this.eventBus.onAny().pipe(
@@ -33,11 +41,18 @@ export class ProgressController {
     return merge(snapshot$, live$, heartbeat$);
   }
 
-  private fetchEvent(projectId: string, liveLabel: 'snapshot' | 'progress'): Observable<MessageEvent> {
+  private fetchEvent(
+    projectId: string,
+    liveLabel: 'snapshot' | 'progress',
+  ): Observable<MessageEvent> {
     return from(this.jobsService.findLatest(projectId)).pipe(
       map((job): MessageEvent => {
         const type =
-          liveLabel === 'snapshot' ? 'snapshot' : job && isTerminal(job.status) ? 'done' : 'progress';
+          liveLabel === 'snapshot'
+            ? 'snapshot'
+            : job && isTerminal(job.status)
+              ? 'done'
+              : 'progress';
         return { type, data: { job: job ? toJobDto(job) : null } };
       }),
     );

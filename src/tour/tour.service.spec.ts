@@ -7,13 +7,24 @@ import type { ChatProvider } from '../llm/chat-provider.interface';
 const REV = 'rev-abc';
 
 function build(project: Record<string, unknown> | null) {
-  const projectsRepository = { findById: vi.fn().mockResolvedValue(project) } as unknown as ProjectsRepository;
-  return new TourService(projectsRepository, {} as ChunksRepository, {} as ChatProvider);
+  const projectsRepository = {
+    findById: vi.fn().mockResolvedValue(project),
+  } as unknown as ProjectsRepository;
+  return new TourService(
+    projectsRepository,
+    {} as ChunksRepository,
+    {} as ChatProvider,
+  );
 }
 
 describe('TourService on-demand generation (Phase 12.12)', () => {
   it('triggers generation when no tour exists for the current revision', async () => {
-    const svc = build({ id: 'p1', status: 'ready', headRevision: REV, tour: null });
+    const svc = build({
+      id: 'p1',
+      status: 'ready',
+      headRevision: REV,
+      tour: null,
+    });
     const gen = vi.spyOn(svc, 'generate').mockResolvedValue(undefined);
     expect((await svc.getTourStatus('p1')).tour).toBeNull();
     expect(gen).toHaveBeenCalledWith('p1');
@@ -28,17 +39,34 @@ describe('TourService on-demand generation (Phase 12.12)', () => {
   });
 
   it('regenerates a stale tour but returns the stale one meanwhile', async () => {
-    const stale = { revision: 'old', summary: '', sections: [], generatedAt: 'x' };
-    const svc = build({ id: 'p1', status: 'ready', headRevision: REV, tour: stale });
+    const stale = {
+      revision: 'old',
+      summary: '',
+      sections: [],
+      generatedAt: 'x',
+    };
+    const svc = build({
+      id: 'p1',
+      status: 'ready',
+      headRevision: REV,
+      tour: stale,
+    });
     const gen = vi.spyOn(svc, 'generate').mockResolvedValue(undefined);
     expect((await svc.getTourStatus('p1')).tour).toEqual(stale);
     expect(gen).toHaveBeenCalledOnce();
   });
 
   it('dedupes concurrent polls into a single in-flight generation', async () => {
-    const svc = build({ id: 'p1', status: 'ready', headRevision: REV, tour: null });
+    const svc = build({
+      id: 'p1',
+      status: 'ready',
+      headRevision: REV,
+      tour: null,
+    });
     let resolve!: () => void;
-    const gen = vi.spyOn(svc, 'generate').mockReturnValue(new Promise<void>((r) => (resolve = () => r())));
+    const gen = vi
+      .spyOn(svc, 'generate')
+      .mockReturnValue(new Promise<void>((r) => (resolve = () => r())));
     await svc.getTourStatus('p1');
     await svc.getTourStatus('p1'); // still in-flight → no second call
     expect(gen).toHaveBeenCalledOnce();
@@ -46,7 +74,12 @@ describe('TourService on-demand generation (Phase 12.12)', () => {
   });
 
   it('does not trigger for a project that is not ready', async () => {
-    const svc = build({ id: 'p1', status: 'indexing', headRevision: REV, tour: null });
+    const svc = build({
+      id: 'p1',
+      status: 'indexing',
+      headRevision: REV,
+      tour: null,
+    });
     const gen = vi.spyOn(svc, 'generate').mockResolvedValue(undefined);
     await svc.getTourStatus('p1');
     expect(gen).not.toHaveBeenCalled();
@@ -65,33 +98,68 @@ describe('TourService status envelope (Phase 13.5)', () => {
   });
 
   it("reports 'generating' on the poll that kicks off generation", async () => {
-    const svc = build({ id: 'p1', status: 'ready', headRevision: REV, tour: null });
+    const svc = build({
+      id: 'p1',
+      status: 'ready',
+      headRevision: REV,
+      tour: null,
+    });
     vi.spyOn(svc, 'generate').mockReturnValue(new Promise<void>(() => {})); // never resolves
-    expect(await svc.getTourStatus('p1')).toEqual({ tour: null, status: 'generating' });
+    expect(await svc.getTourStatus('p1')).toEqual({
+      tour: null,
+      status: 'generating',
+    });
   });
 
   it("reports 'absent' once an attempt for this revision produced no tour (stops the poll)", async () => {
     // generate resolves without the project ever gaining a tour (no chunks, empty
     // sections) — the second poll must not re-trigger, and must say 'absent'.
-    const svc = build({ id: 'p1', status: 'ready', headRevision: REV, tour: null });
+    const svc = build({
+      id: 'p1',
+      status: 'ready',
+      headRevision: REV,
+      tour: null,
+    });
     const gen = vi.spyOn(svc, 'generate').mockResolvedValue(undefined);
     expect((await svc.getTourStatus('p1')).status).toBe('generating');
     await flush();
-    expect(await svc.getTourStatus('p1')).toEqual({ tour: null, status: 'absent' });
+    expect(await svc.getTourStatus('p1')).toEqual({
+      tour: null,
+      status: 'absent',
+    });
     expect(gen).toHaveBeenCalledOnce(); // not re-triggered
   });
 
   it("reports 'absent' for a ready project with no headRevision (never indexed)", async () => {
-    const svc = build({ id: 'p1', status: 'ready', headRevision: null, tour: null });
+    const svc = build({
+      id: 'p1',
+      status: 'ready',
+      headRevision: null,
+      tour: null,
+    });
     const gen = vi.spyOn(svc, 'generate').mockResolvedValue(undefined);
-    expect(await svc.getTourStatus('p1')).toEqual({ tour: null, status: 'absent' });
+    expect(await svc.getTourStatus('p1')).toEqual({
+      tour: null,
+      status: 'absent',
+    });
     expect(gen).not.toHaveBeenCalled();
   });
 
   it('re-attempts after a new revision even if the prior one produced nothing', async () => {
-    const project = { id: 'p1', status: 'ready', headRevision: REV, tour: null };
-    const projectsRepository = { findById: vi.fn().mockResolvedValue(project) } as unknown as ProjectsRepository;
-    const svc = new TourService(projectsRepository, {} as ChunksRepository, {} as ChatProvider);
+    const project = {
+      id: 'p1',
+      status: 'ready',
+      headRevision: REV,
+      tour: null,
+    };
+    const projectsRepository = {
+      findById: vi.fn().mockResolvedValue(project),
+    } as unknown as ProjectsRepository;
+    const svc = new TourService(
+      projectsRepository,
+      {} as ChunksRepository,
+      {} as ChatProvider,
+    );
     const gen = vi.spyOn(svc, 'generate').mockResolvedValue(undefined);
 
     expect((await svc.getTourStatus('p1')).status).toBe('generating');

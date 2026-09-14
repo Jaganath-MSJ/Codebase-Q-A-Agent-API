@@ -1,9 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { buildCanonicalIdByPath, toCanonicalRankedIds } from './hybrid.retriever';
+import {
+  buildCanonicalIdByPath,
+  toCanonicalRankedIds,
+} from './hybrid.retriever';
 import type { ScoredChunk } from './vector.retriever';
 
 function chunk(chunkId: string, path: string): ScoredChunk {
-  return { chunkId, path, startLine: 1, endLine: 1, content: '', contentHash: '', symbol: null, score: 0 };
+  return {
+    chunkId,
+    path,
+    startLine: 1,
+    endLine: 1,
+    content: '',
+    contentHash: '',
+    symbol: null,
+    score: 0,
+  };
 }
 
 describe('buildCanonicalIdByPath', () => {
@@ -24,13 +36,20 @@ describe('toCanonicalRankedIds', () => {
     // one arm's top ranks — without this, that file would cast 3 rank
     // votes in RRF instead of 1, letting a heavily-chunked file win fusion
     // purely from chunk count rather than relevance.
-    const results = [chunk('big-1', 'big.ts'), chunk('other', 'other.ts'), chunk('big-2', 'big.ts')];
+    const results = [
+      chunk('big-1', 'big.ts'),
+      chunk('other', 'other.ts'),
+      chunk('big-2', 'big.ts'),
+    ];
     const canonical = new Map([
       ['big.ts', 'big-1'],
       ['other.ts', 'other'],
     ]);
 
-    expect(toCanonicalRankedIds(results, canonical)).toEqual(['big-1', 'other']);
+    expect(toCanonicalRankedIds(results, canonical)).toEqual([
+      'big-1',
+      'other',
+    ]);
   });
 
   it('is a no-op when every path is already distinct', () => {

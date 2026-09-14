@@ -11,7 +11,14 @@ import { SearchController } from './search.controller';
 @Module({
   imports: [EmbeddingsModule],
   controllers: [SearchController],
-  providers: [VectorRetriever, FtsRetriever, TrigramRetriever, HybridRetriever, ReferencesRetriever, RetrievalService],
+  providers: [
+    VectorRetriever,
+    FtsRetriever,
+    TrigramRetriever,
+    HybridRetriever,
+    ReferencesRetriever,
+    RetrievalService,
+  ],
   exports: [RetrievalService],
 })
 export class RetrievalModule {}

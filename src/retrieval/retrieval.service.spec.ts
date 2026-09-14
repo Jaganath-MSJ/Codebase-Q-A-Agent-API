@@ -12,12 +12,27 @@ import type { EmbeddingProvider } from '../embeddings/embedding-provider.interfa
 const ACTIVE = 'local:nomic-ai/nomic-embed-text-v1.5';
 
 function build(projectOverrides: Record<string, unknown> = {}) {
-  const project = { id: 'p1', name: 'P1', status: 'ready', embeddingModel: ACTIVE, ...projectOverrides };
-  const projectsRepository = { findById: vi.fn().mockResolvedValue(project) } as unknown as ProjectsRepository;
-  const hybridRetriever = { search: vi.fn().mockResolvedValue([]) } as unknown as HybridRetriever;
-  const vectorRetriever = { search: vi.fn().mockResolvedValue([]) } as unknown as VectorRetriever;
+  const project = {
+    id: 'p1',
+    name: 'P1',
+    status: 'ready',
+    embeddingModel: ACTIVE,
+    ...projectOverrides,
+  };
+  const projectsRepository = {
+    findById: vi.fn().mockResolvedValue(project),
+  } as unknown as ProjectsRepository;
+  const hybridRetriever = {
+    search: vi.fn().mockResolvedValue([]),
+  } as unknown as HybridRetriever;
+  const vectorRetriever = {
+    search: vi.fn().mockResolvedValue([]),
+  } as unknown as VectorRetriever;
   const embedQuery = vi.fn().mockResolvedValue([0.1, 0.2]);
-  const embeddingProvider = { id: ACTIVE, embedQuery } as unknown as EmbeddingProvider;
+  const embeddingProvider = {
+    id: ACTIVE,
+    embedQuery,
+  } as unknown as EmbeddingProvider;
   const svc = new RetrievalService(
     projectsRepository,
     vectorRetriever,
@@ -41,7 +56,9 @@ describe('RetrievalService.searchWithQueryVector (Phase 12.11)', () => {
 
   it('throws on an embedding-model mismatch (caught/isolated by the fan-out caller)', async () => {
     const { svc } = build({ embeddingModel: 'gemini:other' });
-    await expect(svc.searchWithQueryVector('p1', 'q', [0.1], 10)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      svc.searchWithQueryVector('p1', 'q', [0.1], 10),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('embedQuery delegates to the active provider exactly once', async () => {

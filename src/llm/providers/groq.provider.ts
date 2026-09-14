@@ -1,7 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import Groq from 'groq-sdk';
 import { ConfigService } from '../../config/config.service';
-import type { ChatCompletion, ChatEvent, ChatProvider, ChatRequest, ChatStopReason } from '../chat-provider.interface';
+import type {
+  ChatCompletion,
+  ChatEvent,
+  ChatProvider,
+  ChatRequest,
+  ChatStopReason,
+} from '../chat-provider.interface';
 
 // console.groq.com/docs/models — the strongest model on Groq's free tier for
 // code reasoning (per docs/research-free-ai-providers.md). The model itself
@@ -27,7 +33,10 @@ export class GroqChatProvider implements ChatProvider {
     this.client = new Groq({ apiKey: config.groqApiKey });
   }
 
-  async complete(req: ChatRequest, signal?: AbortSignal): Promise<ChatCompletion> {
+  async complete(
+    req: ChatRequest,
+    signal?: AbortSignal,
+  ): Promise<ChatCompletion> {
     const response = await this.client.chat.completions.create(
       {
         model: MODEL_ID,
@@ -50,7 +59,10 @@ export class GroqChatProvider implements ChatProvider {
     };
   }
 
-  async *stream(req: ChatRequest, signal?: AbortSignal): AsyncIterable<ChatEvent> {
+  async *stream(
+    req: ChatRequest,
+    signal?: AbortSignal,
+  ): AsyncIterable<ChatEvent> {
     const stream = await this.client.chat.completions.create(
       {
         model: MODEL_ID,
@@ -82,7 +94,11 @@ export class GroqChatProvider implements ChatProvider {
       if (finishReason) stopReason = toStopReason(finishReason);
     }
 
-    yield { type: 'usage', inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 };
+    yield {
+      type: 'usage',
+      inputTokens: inputTokens ?? 0,
+      outputTokens: outputTokens ?? 0,
+    };
     yield { type: 'done', stopReason, servedBy: this.id };
   }
 }

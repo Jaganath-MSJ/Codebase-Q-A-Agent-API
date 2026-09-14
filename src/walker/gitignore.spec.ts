@@ -30,7 +30,10 @@ describe('loadGitignoreFilter', () => {
     await writeFile(path.join(root, '.gitignore'), 'dist\n');
     await writeFile(path.join(root, 'pkg', '.gitignore'), '*.log\n');
 
-    const filter = await loadGitignoreFilter(root, ['.gitignore', 'pkg/.gitignore']);
+    const filter = await loadGitignoreFilter(root, [
+      '.gitignore',
+      'pkg/.gitignore',
+    ]);
 
     // pkg's *.log rule applies inside pkg...
     expect(filter.isIgnored('pkg/debug.log')).toBe(true);

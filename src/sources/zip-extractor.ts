@@ -53,7 +53,8 @@ function isSymlinkEntry(entry: yauzl.Entry): boolean {
 // reaches the loop — not a reliance on an upstream library's incidental
 // behavior, which is exactly the phase doc's point about routing every
 // filesystem boundary through one helper rather than trusting the parser.
-const YAUZL_PATH_REJECTION_RE = /^(absolute path|invalid relative path|invalid characters in fileName):/;
+const YAUZL_PATH_REJECTION_RE =
+  /^(absolute path|invalid relative path|invalid characters in fileName):/;
 
 export async function extractZipSafely(
   zipPath: string,
@@ -62,7 +63,10 @@ export async function extractZipSafely(
 ): Promise<void> {
   await mkdir(destRoot, { recursive: true });
 
-  const zipfile = await yauzl.openPromise(zipPath, { lazyEntries: true, autoClose: false });
+  const zipfile = await yauzl.openPromise(zipPath, {
+    lazyEntries: true,
+    autoClose: false,
+  });
   let entryCount = 0;
   let totalBytes = 0;
 
@@ -70,14 +74,18 @@ export async function extractZipSafely(
     for await (const entry of zipfile.eachEntry()) {
       entryCount++;
       if (entryCount > limits.maxEntries) {
-        throw new ZipBombError(`Zip contains more than ${limits.maxEntries} entries`);
+        throw new ZipBombError(
+          `Zip contains more than ${limits.maxEntries} entries`,
+        );
       }
 
       assertSafeZipEntryPath(entry.fileName);
       const destPath = resolveInside(destRoot, entry.fileName);
 
       if (isSymlinkEntry(entry)) {
-        throw new ZipSymlinkError(`Symlink entries are rejected: ${entry.fileName}`);
+        throw new ZipSymlinkError(
+          `Symlink entries are rejected: ${entry.fileName}`,
+        );
       }
 
       if (entry.fileName.endsWith('/')) {
@@ -86,14 +94,22 @@ export async function extractZipSafely(
       }
 
       if (entry.uncompressedSize > limits.maxEntryBytes) {
-        throw new ZipBombError(`Entry exceeds the per-file size cap: ${entry.fileName}`);
+        throw new ZipBombError(
+          `Entry exceeds the per-file size cap: ${entry.fileName}`,
+        );
       }
       if (totalBytes + entry.uncompressedSize > limits.maxTotalBytes) {
         throw new ZipBombError('Zip exceeds the total uncompressed size cap');
       }
 
       await mkdir(path.dirname(destPath), { recursive: true });
-      totalBytes += await writeEntryCapped(zipfile, entry, destPath, limits, totalBytes);
+      totalBytes += await writeEntryCapped(
+        zipfile,
+        entry,
+        destPath,
+        limits,
+        totalBytes,
+      );
     }
   } catch (err) {
     if (err instanceof Error && YAUZL_PATH_REJECTION_RE.test(err.message)) {
@@ -136,8 +152,15 @@ function writeEntryCapped(
 
       readStream.on('data', (chunk: Buffer) => {
         written += chunk.length;
-        if (written > limits.maxEntryBytes || bytesSoFar + written > limits.maxTotalBytes) {
-          fail(new ZipBombError(`Entry exceeds the size cap while extracting: ${entry.fileName}`));
+        if (
+          written > limits.maxEntryBytes ||
+          bytesSoFar + written > limits.maxTotalBytes
+        ) {
+          fail(
+            new ZipBombError(
+              `Entry exceeds the size cap while extracting: ${entry.fileName}`,
+            ),
+          );
         }
       });
       readStream.on('error', fail);

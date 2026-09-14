@@ -25,7 +25,10 @@ export function decodeCredentialKey(base64Key: string): Buffer {
 export function encrypt(plaintext: string, key: Buffer): EncryptedPayload {
   const iv = randomBytes(IV_BYTES);
   const cipher = createCipheriv(ALGORITHM, key, iv);
-  const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const ciphertext = Buffer.concat([
+    cipher.update(plaintext, 'utf8'),
+    cipher.final(),
+  ]);
   return { ciphertext, iv, authTag: cipher.getAuthTag() };
 }
 
@@ -33,5 +36,8 @@ export function encrypt(plaintext: string, key: Buffer): EncryptedPayload {
 export function decrypt(payload: EncryptedPayload, key: Buffer): string {
   const decipher = createDecipheriv(ALGORITHM, key, payload.iv);
   decipher.setAuthTag(payload.authTag);
-  return Buffer.concat([decipher.update(payload.ciphertext), decipher.final()]).toString('utf8');
+  return Buffer.concat([
+    decipher.update(payload.ciphertext),
+    decipher.final(),
+  ]).toString('utf8');
 }

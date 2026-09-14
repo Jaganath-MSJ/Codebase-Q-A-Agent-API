@@ -2,7 +2,11 @@ import { Inject, Injectable } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { Db } from '../pool';
 import { DB_TOKEN } from '../tokens';
-import { sourceCredentials, SourceCredentialRow, NewSourceCredentialRow } from '../schema';
+import {
+  sourceCredentials,
+  SourceCredentialRow,
+  NewSourceCredentialRow,
+} from '../schema';
 
 @Injectable()
 export class CredentialsRepository {
@@ -10,7 +14,10 @@ export class CredentialsRepository {
 
   /** Re-entering a token replaces the row rather than adding a second one. */
   async upsert(
-    data: Pick<NewSourceCredentialRow, 'projectId' | 'kind' | 'ciphertext' | 'iv' | 'authTag'>,
+    data: Pick<
+      NewSourceCredentialRow,
+      'projectId' | 'kind' | 'ciphertext' | 'iv' | 'authTag'
+    >,
   ): Promise<SourceCredentialRow> {
     const [row] = await this.db
       .insert(sourceCredentials)
@@ -30,7 +37,9 @@ export class CredentialsRepository {
     return row;
   }
 
-  async findByProjectId(projectId: string): Promise<SourceCredentialRow | undefined> {
+  async findByProjectId(
+    projectId: string,
+  ): Promise<SourceCredentialRow | undefined> {
     const [row] = await this.db
       .select()
       .from(sourceCredentials)

@@ -5,7 +5,11 @@ import * as path from 'node:path';
 import fg from 'fast-glob';
 import { sha256 } from '../common/hash';
 import type { ProjectRow } from '../db/schema';
-import type { MaterializeResult, SourceAdapter, SourceKind } from './source-adapter.interface';
+import type {
+  MaterializeResult,
+  SourceAdapter,
+  SourceKind,
+} from './source-adapter.interface';
 
 // A coarse exclusion list, deliberately not WalkerService's full gitignore/
 // binary/filename filtering (Sources is a sibling capability module and
@@ -22,7 +26,12 @@ import type { MaterializeResult, SourceAdapter, SourceKind } from './source-adap
 // pays for two full directory scans — this one, then WalkerService's own —
 // a real cost accepted in exchange for skipping both entirely when nothing
 // changed. See docs/PROGRESS.md for the tradeoff this was weighed against in 4.1.
-export const REVISION_IGNORE_GLOBS = ['**/node_modules/**', '**/.git/**', '**/dist/**', '**/build/**'];
+export const REVISION_IGNORE_GLOBS = [
+  '**/node_modules/**',
+  '**/.git/**',
+  '**/dist/**',
+  '**/build/**',
+];
 
 @Injectable()
 export class LocalPathAdapter implements SourceAdapter {
@@ -34,7 +43,9 @@ export class LocalPathAdapter implements SourceAdapter {
     try {
       await access(workspacePath, fsConstants.R_OK);
     } catch {
-      throw new NotFoundException(`Local path is not readable: ${workspacePath}`);
+      throw new NotFoundException(
+        `Local path is not readable: ${workspacePath}`,
+      );
     }
 
     const entries = await fg('**/*', {

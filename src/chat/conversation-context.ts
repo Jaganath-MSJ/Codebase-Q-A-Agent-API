@@ -44,7 +44,10 @@ export function recentWindow(exchanges: Exchange[], size: number): Exchange[] {
 }
 
 /** Truncates to ~600 chars without splitting a trailing `[n]` marker in half. */
-export function truncateAnswer(text: string, maxLength = ANSWER_TRUNCATE_LENGTH): string {
+export function truncateAnswer(
+  text: string,
+  maxLength = ANSWER_TRUNCATE_LENGTH,
+): string {
   if (text.length <= maxLength) return text;
   const truncated = text.slice(0, maxLength).replace(/\[\d*$/, '');
   return `${truncated}…`;
@@ -62,6 +65,8 @@ export function evictedExchanges(
 ): Exchange[] {
   const older = exchanges.slice(0, Math.max(0, exchanges.length - windowSize));
   if (!summarizedThroughAssistantId) return older;
-  const idx = older.findIndex((ex) => ex.assistantMessageId === summarizedThroughAssistantId);
+  const idx = older.findIndex(
+    (ex) => ex.assistantMessageId === summarizedThroughAssistantId,
+  );
   return idx === -1 ? older : older.slice(idx + 1);
 }

@@ -16,10 +16,20 @@ export class CredentialsService {
   ) {}
 
   /** Re-entering a token replaces the row rather than adding a second one. */
-  async setCredential(projectId: string, kind: string, token: string): Promise<void> {
+  async setCredential(
+    projectId: string,
+    kind: string,
+    token: string,
+  ): Promise<void> {
     const key = decodeCredentialKey(this.config.credentialKey);
     const { ciphertext, iv, authTag } = encrypt(token, key);
-    await this.credentialsRepository.upsert({ projectId, kind, ciphertext, iv, authTag });
+    await this.credentialsRepository.upsert({
+      projectId,
+      kind,
+      ciphertext,
+      iv,
+      authTag,
+    });
   }
 
   /**
@@ -32,7 +42,10 @@ export class CredentialsService {
     const row = await this.credentialsRepository.findByProjectId(projectId);
     if (!row) return null;
     const key = decodeCredentialKey(this.config.credentialKey);
-    return decrypt({ ciphertext: row.ciphertext, iv: row.iv, authTag: row.authTag }, key);
+    return decrypt(
+      { ciphertext: row.ciphertext, iv: row.iv, authTag: row.authTag },
+      key,
+    );
   }
 
   /** Existence + metadata only — never returns the ciphertext, let alone the plaintext. */

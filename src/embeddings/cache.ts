@@ -16,7 +16,10 @@ export class CachingEmbeddingProvider implements EmbeddingProvider {
   ) {
     this.id = inner.id;
     this.maxBatchSize = inner.maxBatchSize;
-    this.modelCacheDir = path.join(cacheRoot, inner.id.replace(/[^a-zA-Z0-9._-]/g, '_'));
+    this.modelCacheDir = path.join(
+      cacheRoot,
+      inner.id.replace(/[^a-zA-Z0-9._-]/g, '_'),
+    );
   }
 
   async embedDocuments(texts: string[]): Promise<number[][]> {
@@ -80,7 +83,11 @@ export class CachingEmbeddingProvider implements EmbeddingProvider {
       await rm(target, { force: true }).catch(() => undefined);
       return undefined;
     }
-    const floats = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
+    const floats = new Float32Array(
+      buf.buffer,
+      buf.byteOffset,
+      buf.byteLength / 4,
+    );
     return Array.from(floats);
   }
 

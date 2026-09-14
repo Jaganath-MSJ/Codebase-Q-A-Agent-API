@@ -44,8 +44,17 @@ const ALLOWED_EXTENSIONS = new Set([
   '.sh',
 ]);
 
-const FILENAME_DENYLIST = new Set(['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml']);
-const FILENAME_DENYLIST_PATTERNS = [/\.min\.js$/, /\.map$/, /\.snap$/, /\.generated\./];
+const FILENAME_DENYLIST = new Set([
+  'package-lock.json',
+  'yarn.lock',
+  'pnpm-lock.yaml',
+]);
+const FILENAME_DENYLIST_PATTERNS = [
+  /\.min\.js$/,
+  /\.map$/,
+  /\.snap$/,
+  /\.generated\./,
+];
 
 export const MAX_FILE_BYTES = 256 * 1024;
 export const MAX_LINE_LENGTH = 2000;
@@ -66,7 +75,9 @@ function extractExtension(relPath: string): string | null {
  * not a hard rejection — those files fall through to binary detection instead
  * of being excluded just for lacking an extension.
  */
-export function classifyExtension(relPath: string): 'allowed' | 'denied' | 'unknown' {
+export function classifyExtension(
+  relPath: string,
+): 'allowed' | 'denied' | 'unknown' {
   const ext = extractExtension(relPath);
   if (ext === null) return 'unknown';
   return ALLOWED_EXTENSIONS.has(ext) ? 'allowed' : 'denied';
@@ -83,7 +94,10 @@ export function isFilenameDenylisted(relPath: string): boolean {
   return FILENAME_DENYLIST_PATTERNS.some((pattern) => pattern.test(basename));
 }
 
-export function hasExcessiveLineLength(text: string, maxLength = MAX_LINE_LENGTH): boolean {
+export function hasExcessiveLineLength(
+  text: string,
+  maxLength = MAX_LINE_LENGTH,
+): boolean {
   let lineStart = 0;
   for (let i = 0; i <= text.length; i++) {
     if (i === text.length || text[i] === '\n') {

@@ -24,13 +24,17 @@ export class CreateProjectDto {
   @IsNotEmpty()
   sourceRef!: string;
 
-  @ApiPropertyOptional({ description: 'git_url/git_private only — defaults to the repo’s default branch' })
+  @ApiPropertyOptional({
+    description:
+      'git_url/git_private only — defaults to the repo’s default branch',
+  })
   @IsOptional()
   @IsString()
   branch?: string;
 
   @ApiPropertyOptional({
-    description: 'git_private only — a GitHub PAT, encrypted at rest and never returned by the API',
+    description:
+      'git_private only — a GitHub PAT, encrypted at rest and never returned by the API',
   })
   @IsOptional()
   @IsString()
@@ -59,7 +63,8 @@ export class ProjectDto {
   @ApiPropertyOptional({
     type: String,
     nullable: true,
-    description: 'Digest injected into every chat prompt; null until the first successful index',
+    description:
+      'Digest injected into every chat prompt; null until the first successful index',
   })
   overview?: string | null;
 

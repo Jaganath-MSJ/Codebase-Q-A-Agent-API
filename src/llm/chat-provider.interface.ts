@@ -70,7 +70,13 @@ export type ChatStopReason = 'stop' | 'tool_use' | 'length' | 'error';
 
 export type ChatEvent =
   | { type: 'text'; delta: string }
-  | { type: 'tool_call'; id: string; name: string; args: Record<string, unknown>; providerData?: unknown }
+  | {
+      type: 'tool_call';
+      id: string;
+      name: string;
+      args: Record<string, unknown>;
+      providerData?: unknown;
+    }
   | { type: 'usage'; inputTokens: number; outputTokens: number }
   // `servedBy`: the concrete provider that produced this stream — see
   // ChatCompletion.servedBy. Optional so a cached stream from before this
