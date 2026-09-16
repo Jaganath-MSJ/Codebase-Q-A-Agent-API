@@ -16,9 +16,12 @@ import type {
 // shouldn't depend on Walker's rules). Being coarser only means the revision
 // changes when it doesn't strictly need to (an unindexed file was touched).
 //
-// The hash is (size, mtime) per file, not content — cheap, but not airtight:
-// a tool that preserves timestamps (zip extraction, some sync/restore flows)
-// could in principle leave a changed file with an identical (size, mtime).
+// The hash is (size, mtime, ctime, ino) per file, not content. It began as
+// (size, mtime) alone, which was cheap but not airtight: a tool that preserves
+// timestamps (zip extraction, some sync/restore flows) could leave a changed
+// file with an identical (size, mtime) and the early exit would skip it —
+// DEF-008. `ctime` closes that, since the OS bumps it on every write and no
+// API can restore it, and `ino` catches a replace-by-rename.
 // A true content hash would mean reading every file, which is exactly the
 // per-file cost IndexingService's diff loop already pays right after this —
 // the early exit would have nothing left to skip. This also means every run
@@ -58,8 +61,28 @@ export class LocalPathAdapter implements SourceAdapter {
 
     const entryStats = await Promise.all(
       entries.map(async (relPath) => {
-        const { size, mtimeMs } = await stat(path.join(workspacePath, relPath));
-        return `${relPath}:${size}:${Math.round(mtimeMs)}`;
+        // `ctimeMs` and `ino` close DEF-008 without giving up the early exit.
+        // mtime alone is forgeable: `utimes` restores it, so a same-size edit
+        // made by an mtime-preserving tool (rsync -a, cp -p, zip extraction,
+        // a restore) used to produce an identical revision and leave a stale
+        // index reporting as healthy. `ctime` is the inode's change time —
+        // the OS bumps it on any write and no API can set it back — and `ino`
+        // catches a replace-by-rename. Still metadata only, so this stays far
+        // cheaper than the content hash the diff loop pays for right after.
+        //
+        // The trade-off is deliberately inverted: a metadata-only touch (a
+        // chmod, a restore that allocates a new inode) now costs one extra
+        // diff pass that finds nothing. A false re-index is cheap; a silently
+        // stale index is not.
+        const { size, mtimeMs, ctimeMs, ino } = await stat(
+          path.join(workspacePath, relPath),
+        );
+        // `ctimeMs` keeps its full precision deliberately — rounding it to the
+        // millisecond throws away exactly the resolution this depends on, and a
+        // rewrite that lands inside the same tick as the previous one would go
+        // back to being invisible. mtime stays rounded: it is the field the
+        // trick restores anyway, so its precision buys nothing.
+        return `${relPath}:${size}:${Math.round(mtimeMs)}:${ctimeMs}:${ino}`;
       }),
     );
 

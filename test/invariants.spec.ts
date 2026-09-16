@@ -78,6 +78,14 @@ describe('INV-3 — all source file reads go through common/read-file.ts', () =>
       'walker/walker.service.ts',
       'reads raw bytes for binary detection, then hands them to toLines',
     ],
+    [
+      'sources/git-askpass.ts',
+      // Added with the DEF-009 fix. Not merely exempt — routing this through
+      // read-file.ts would be WRONG: it normalises CRLF to LF, and the helper
+      // is a Windows `.cmd` whose CRLF ending is load-bearing, so the
+      // byte-exact comparison this read exists for would never match again.
+      'reads back its own generated .cmd helper to verify it, byte-exactly; toLines would normalise the CRLF it must preserve',
+    ],
   ]);
 
   it('TC-INV-001 no module outside the allow-list reads files directly', async () => {

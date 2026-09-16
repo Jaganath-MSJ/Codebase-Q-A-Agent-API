@@ -245,14 +245,14 @@ describe('Tour, changes, search, uploads and providers routes', () => {
     const search = (body: unknown) => h.request('/search', json(body));
     const valid = { projectId: VALID_UUID, query: 'auth', mode: 'hybrid' };
 
-    it('TC-MISC-200 [DEFECT-010] returns ranked results — but as 201, not the declared 200', async () => {
-      // SearchController is the ONLY POST route in the codebase without an
-      // explicit @HttpCode, so Nest's POST default (201) applies — while its
-      // @ApiOkResponse publishes 200 in the OpenAPI spec, and therefore in the
-      // generated web/src/api/schema.d.ts. Asserting the real behaviour and
-      // naming the defect rather than the documented-but-wrong value.
+    it('TC-MISC-200 [DEFECT-010 fixed] returns ranked results as the declared 200', async () => {
+      // Was the one POST route without an explicit @HttpCode, so Nest's POST
+      // default (201) applied while @ApiOkResponse published 200 in the OpenAPI
+      // spec and therefore in the generated web/src/api/schema.d.ts. Corrected
+      // towards the spec: a search creates nothing, so 200 is also the truer
+      // status, and schema.d.ts already declared it — no regeneration needed.
       const res = await search(valid);
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(200);
       expect(res.body).toHaveLength(1);
     });
 
@@ -278,7 +278,7 @@ describe('Tour, changes, search, uploads and providers routes', () => {
     it('TC-MISC-203 accepts every documented mode', async () => {
       for (const mode of ['vector', 'fts', 'trigram', 'hybrid']) {
         const res = await search({ ...valid, mode });
-        expect(res.status, mode).toBe(201);
+        expect(res.status, mode).toBe(200);
       }
     });
 
@@ -306,7 +306,7 @@ describe('Tour, changes, search, uploads and providers routes', () => {
 
     it('TC-MISC-209 accepts k at both bounds', async () => {
       for (const k of [1, 50]) {
-        expect((await search({ ...valid, k })).status, String(k)).toBe(201);
+        expect((await search({ ...valid, k })).status, String(k)).toBe(200);
       }
     });
 

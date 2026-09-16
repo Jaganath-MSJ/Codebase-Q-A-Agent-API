@@ -6,8 +6,13 @@ import simpleGit, { CleanOptions, type SimpleGit } from 'simple-git';
 // https:// only, github.com only, owner/repo shape, no shell metacharacters —
 // this string is about to be shelled out to via an argument array (never a
 // command string), but it is still worth rejecting anything unexpected here.
+// The host is spelled out character-class-by-character rather than with an `/i`
+// flag on purpose (DEF-005). DNS hostnames are case-insensitive, so a pasted
+// `https://GitHub.com/owner/repo` — which the browser and `git` both accept —
+// must pass. The owner and repo segments must NOT: GitHub preserves their case,
+// and a blanket `/i` would loosen them along with the host.
 export const GITHUB_URL_RE =
-  /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+?(?:\.git)?\/?$/;
+  /^https:\/\/[Gg][Ii][Tt][Hh][Uu][Bb]\.[Cc][Oo][Mm]\/[\w.-]+\/[\w.-]+?(?:\.git)?\/?$/;
 
 // `branch` reaches `git fetch`/`git clone` as a bare positional argv entry
 // (not a shell string, so no shell injection) — but a value starting with

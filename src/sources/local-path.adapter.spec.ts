@@ -146,14 +146,16 @@ describe('LocalPathAdapter', () => {
     });
   });
 
-  it('TC-LPA-030 [DEFECT-008] misses a same-size edit that preserves the mtime', async () => {
-    // The hash is (relPath, size, mtime) — not content. A tool that rewrites a
-    // file to the same length while restoring its timestamp (zip extraction,
-    // rsync --archive, some restore flows) produces an IDENTICAL revision, so
-    // indexing early-exits and the index silently goes stale.
+  it('TC-LPA-030 [DEFECT-008 fixed] catches a same-size edit that preserves the mtime', async () => {
+    // Was the stale-index hole: with the hash over (relPath, size, mtime) only,
+    // a tool that rewrites a file to the same length while restoring its
+    // timestamp (zip extraction, rsync --archive, a restore) produced an
+    // IDENTICAL revision, so indexing early-exited and the index silently went
+    // stale while reporting as healthy.
     //
-    // The module's own comment acknowledges this trade-off. Pinned here so the
-    // exposure is measured rather than assumed, and logged as DEF-008.
+    // `ctime` closes it: the OS bumps the inode change time on every write and
+    // no API can set it back — which is exactly why `utimes` below cannot hide
+    // the edit any more.
     const file = path.join(root, 'src', 'a.ts');
     const original = await stat(file);
     const before = await revisionOf();
@@ -161,7 +163,23 @@ describe('LocalPathAdapter', () => {
     await writeFile(file, 'const a = 2;'); // same byte length, different content
     await utimes(file, original.atime, original.mtime); // restore the timestamp
 
-    expect(await revisionOf()).toBe(before);
+    expect(await revisionOf()).not.toBe(before);
+  });
+
+  it('TC-LPA-032 [DEFECT-008 fix guard] is still stable when nothing changes at all', async () => {
+    // The fix widens what counts as a change, so the opposite risk is now the
+    // live one: if the revision were unstable across calls, the early exit
+    // would never fire and every poll would re-walk the tree. Two calls with no
+    // filesystem activity between them must agree.
+    expect(await revisionOf()).toBe(await revisionOf());
+  });
+
+  it('TC-LPA-033 [DEFECT-008 fix guard] still catches an ordinary edit', async () => {
+    // The obvious case, which must keep working — a plain write that changes
+    // both size and mtime.
+    const before = await revisionOf();
+    await writeFile(path.join(root, 'src', 'a.ts'), 'const a = 12345;');
+    expect(await revisionOf()).not.toBe(before);
   });
 
   it('TC-LPA-031 returns a stable revision for an empty directory', async () => {

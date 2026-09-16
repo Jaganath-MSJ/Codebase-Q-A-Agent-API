@@ -103,17 +103,45 @@ describe('ensureAskpassScript', () => {
     });
   });
 
-  it('TC-ASK-020 [OBSERVATION] trusts an existing file without validating it', async () => {
-    // `existsSync` short-circuits before any content check, so a pre-existing
-    // (or tampered) git-askpass.cmd under DATA_DIR is used as-is and executed by
-    // git. DATA_DIR is a local, app-owned directory, so this is not a privilege
-    // boundary — recorded as an observation only (see DEF-009).
+  it('TC-ASK-020 [DEFECT-009 fixed] replaces an existing file whose content is wrong', async () => {
+    // Was existence-only: `existsSync` short-circuited before any content
+    // check, so whatever sat at this path was handed to git as GIT_ASKPASS and
+    // executed. Not a privilege boundary — DATA_DIR is app-owned on a
+    // single-user machine — but the check now asks the question it reads as
+    // asking: is the CORRECT helper present?
     const scriptPath = path.join(dataDir, 'git-askpass.cmd');
     await writeFile(scriptPath, '@echo tampered\r\n', 'utf8');
 
     const returned = await ensureAskpassScript(dataDir);
 
     expect(returned).toBe(scriptPath);
-    expect(await readFile(scriptPath, 'utf8')).toBe('@echo tampered\r\n');
+    expect(await readFile(scriptPath, 'utf8')).toBe(
+      `@echo %${ASKPASS_TOKEN_ENV_VAR}%\r\n`,
+    );
+  });
+
+  it('TC-ASK-021 [DEFECT-009 fix guard] rewrites a truncated script', async () => {
+    // The practical payoff, beyond tamper-resistance: a half-written file from
+    // an interrupted run used to persist forever, because it existed.
+    const scriptPath = path.join(dataDir, 'git-askpass.cmd');
+    await writeFile(scriptPath, '@echo %CQA', 'utf8');
+
+    await ensureAskpassScript(dataDir);
+
+    expect(await readFile(scriptPath, 'utf8')).toBe(
+      `@echo %${ASKPASS_TOKEN_ENV_VAR}%\r\n`,
+    );
+  });
+
+  it('TC-ASK-022 [DEFECT-009 fix guard] leaves a correct script untouched', async () => {
+    // The check must not rewrite on every call — that would be a needless disk
+    // write on the hot path of every private clone and fetch.
+    const scriptPath = path.join(dataDir, 'git-askpass.cmd');
+    await ensureAskpassScript(dataDir);
+    const first = await stat(scriptPath);
+
+    await ensureAskpassScript(dataDir);
+
+    expect((await stat(scriptPath)).mtimeMs).toBe(first.mtimeMs);
   });
 });

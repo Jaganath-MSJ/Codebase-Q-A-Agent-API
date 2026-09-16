@@ -87,11 +87,29 @@ describe('GITHUB_URL_RE', () => {
   });
 
   describe('TC-SRC-040..041 — documented looseness', () => {
-    it('TC-SRC-040 is case sensitive about the host', () => {
-      // Real GitHub hosts are case-insensitive, so this rejects a URL a user
-      // could legitimately paste. Recorded as an observation (DEF-005), not a
-      // security hole — the failure mode is a confusing rejection, not a bypass.
-      expect(GITHUB_URL_RE.test('https://GitHub.com/owner/repo')).toBe(false);
+    it('TC-SRC-040 [DEFECT-005 fixed] accepts any casing of the host', () => {
+      // DNS hostnames are case-insensitive, so a URL the browser and `git` both
+      // accept must not be rejected here. Was DEF-005.
+      expect(GITHUB_URL_RE.test('https://GitHub.com/owner/repo')).toBe(true);
+      expect(GITHUB_URL_RE.test('https://GITHUB.COM/owner/repo')).toBe(true);
+      expect(GITHUB_URL_RE.test('https://github.com/owner/repo')).toBe(true);
+    });
+
+    it('TC-SRC-042 [DEFECT-005 fix guard] keeps owner and repo case-sensitive', () => {
+      // The reason the fix spells the host out character by character instead
+      // of adding an `/i` flag: a blanket flag would loosen these segments too,
+      // and GitHub preserves their case. Matching is not the same as equality —
+      // both spellings are valid URLs, so both must match; what must NOT happen
+      // is the pattern silently treating them as interchangeable elsewhere.
+      expect(GITHUB_URL_RE.test('https://github.com/OWNER/Repo')).toBe(true);
+      // The host class is exactly six characters wide — no other host slips in.
+      expect(GITHUB_URL_RE.test('https://githubXcom/owner/repo')).toBe(false);
+      expect(GITHUB_URL_RE.test('https://notgithub.com/owner/repo')).toBe(
+        false,
+      );
+      expect(GITHUB_URL_RE.test('https://github.com.evil.tld/owner/repo')).toBe(
+        false,
+      );
     });
 
     it('TC-SRC-041 allows dots in the owner and repo segments', () => {
