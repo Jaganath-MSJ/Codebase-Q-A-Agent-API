@@ -143,16 +143,25 @@ describe('validateEnv', () => {
       expect(() => validateEnv({ ...MINIMAL, PORT: 'abc' })).toThrow();
     });
 
-    it('TC-CFG-033 [DEFECT-006] accepts an out-of-range port', () => {
-      // `z.coerce.number()` has no bounds, so 0, negatives and >65535 all pass
-      // validation and fail later at listen() with a less obvious error.
-      expect(validateEnv({ ...MINIMAL, PORT: '0' }).PORT).toBe(0);
-      expect(validateEnv({ ...MINIMAL, PORT: '-1' }).PORT).toBe(-1);
-      expect(validateEnv({ ...MINIMAL, PORT: '99999' }).PORT).toBe(99999);
+    it('TC-CFG-033 [DEFECT-006 fixed] rejects an out-of-range port at boot', () => {
+      // Previously these all passed validation and failed later inside
+      // listen(), where the error no longer names PORT. `0` is rejected on
+      // purpose: Node accepts it and binds a random free port, so it is the one
+      // bad value that starts successfully and then cannot be found.
+      expect(() => validateEnv({ ...MINIMAL, PORT: '0' })).toThrow(/PORT/);
+      expect(() => validateEnv({ ...MINIMAL, PORT: '-1' })).toThrow(/PORT/);
+      expect(() => validateEnv({ ...MINIMAL, PORT: '99999' })).toThrow(/PORT/);
     });
 
-    it('TC-CFG-034 [DEFECT-006] accepts a fractional port', () => {
-      expect(validateEnv({ ...MINIMAL, PORT: '3000.7' }).PORT).toBe(3000.7);
+    it('TC-CFG-034 [DEFECT-006 fixed] rejects a fractional port', () => {
+      expect(() => validateEnv({ ...MINIMAL, PORT: '3000.7' })).toThrow(/PORT/);
+    });
+
+    it('TC-CFG-035 [DEFECT-006 fixed] accepts both ends of the valid range', () => {
+      // The boundary matters as much as the rejection: an off-by-one here would
+      // lock out port 65535, and 1 is what a privileged-port test would use.
+      expect(validateEnv({ ...MINIMAL, PORT: '1' }).PORT).toBe(1);
+      expect(validateEnv({ ...MINIMAL, PORT: '65535' }).PORT).toBe(65535);
     });
   });
 

@@ -73,16 +73,49 @@ describe('toLines', () => {
   });
 
   describe('TC-RF-020..024 — encoding and exotic content', () => {
-    it('TC-RF-020 [DEFECT-001] does NOT strip a UTF-8 BOM', () => {
-      // Documents current behaviour: the BOM stays glued to the first line, so
-      // line 1 of a BOM-prefixed file differs invisibly from its on-screen text.
+    it('TC-RF-020 [DEFECT-001 fixed] strips a leading UTF-8 BOM', () => {
+      // A BOM is an encoding marker, not content. It used to stay glued to the
+      // first line, so line 1 of a BOM-prefixed file differed invisibly from
+      // its on-screen text -- and every line number in the system derives from
+      // this array, which is what made a cosmetic-looking stray character an
+      // invariant problem (INV-3).
       //
       // Written as `\uFEFF`, never as a literal BOM byte: a literal would make
       // git classify this whole file as binary, costing every future diff,
       // blame and review on it.
       const { lines } = toLines('\uFEFFconst x = 1;');
-      expect(lines[0]).toBe('\uFEFFconst x = 1;');
-      expect(lines[0]!.charCodeAt(0)).toBe(0xfeff);
+      expect(lines[0]).toBe('const x = 1;');
+      expect(lines[0]!.charCodeAt(0)).not.toBe(0xfeff);
+    });
+
+    it('TC-RF-025 [DEFECT-001 fixed] strips the BOM from `text` as well as `lines`', () => {
+      // `text` is what contentHash is computed over, so it has to agree with
+      // `lines` or the same file would hash two different ways depending on
+      // which field a caller reached for.
+      const { text, lines } = toLines('\uFEFFa\nb');
+      expect(text).toBe('a\nb');
+      expect(lines).toEqual(['a', 'b']);
+    });
+
+    it('TC-RF-026 [DEFECT-001 fixed] strips only a LEADING BOM', () => {
+      // Mid-file, U+FEFF is a legitimate zero-width no-break space. Removing it
+      // there would silently corrupt the line -- and, worse, shift nothing, so
+      // the damage would be invisible in a diff.
+      const { lines } = toLines('\uFEFFa\nb\uFEFFc');
+      expect(lines).toEqual(['a', 'b\uFEFFc']);
+    });
+
+    it('TC-RF-027 [DEFECT-001 fixed] strips a BOM on a CRLF file too', () => {
+      // The two normalisations run in sequence; this pins that neither one
+      // defeats the other on a file that needs both (the common Windows case).
+      const { lines } = toLines('\uFEFFa\r\nb\r\n');
+      expect(lines).toEqual(['a', 'b']);
+    });
+
+    it('TC-RF-028 [DEFECT-001 fixed] leaves a BOM-only file empty, not one blank line', () => {
+      const { text, lines } = toLines('\uFEFF');
+      expect(text).toBe('');
+      expect(lines).toEqual([]);
     });
 
     it('TC-RF-021 preserves emoji and astral-plane characters', () => {

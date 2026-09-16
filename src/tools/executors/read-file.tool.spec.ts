@@ -146,13 +146,34 @@ describe('readFileTool', () => {
       expect(result.note).toMatch(/past the end of the file \(0 lines\)/);
     });
 
-    it('TC-TOOL-033 [DEFECT-004] throws on a directory, and the error carries the absolute host path', async () => {
-      // Only ENOENT is handled; every other fs error propagates. The registry
-      // catches it and turns `err.message` into the note the MODEL reads —
-      // and that message embeds the absolute workspace path. Documented here,
-      // logged as DEF-004; no product code is changed in this phase.
-      await expect(call({ path: 'src' })).rejects.toThrow(/EISDIR/);
-      await expect(call({ path: 'src' })).rejects.toThrow(workspace);
+    it('TC-TOOL-033 [DEFECT-004 fixed] answers a directory read with a note, not an exception', async () => {
+      // Was the S2 leak: EISDIR propagated, the registry turned `err.message`
+      // into the model-visible note, and that message embeds the absolute
+      // workspace path. Now handled here, in the model's own vocabulary.
+      const result = await call({ path: 'src' });
+
+      expect(result.regions).toEqual([]);
+      expect(result.note).toBe(
+        'Error: "src" is a directory, not a file. Use list_files to see what is inside it.',
+      );
+      expect(result.note).not.toContain(workspace);
+    });
+
+    it('TC-TOOL-034 [DEFECT-004 fixed] reports any other fs error by code, without the absolute path', async () => {
+      // EISDIR is the reachable one; the guarantee worth pinning is that NO fs
+      // error escapes as a raw driver message. Provoked for real rather than
+      // stubbed: a 300-character filename exceeds NAME_MAX (255), so the read
+      // fails with ENAMETOOLONG — a genuine non-ENOENT, non-EISDIR error.
+      const relPath = `src/${'n'.repeat(300)}.ts`;
+      const result = await call({ path: relPath });
+
+      expect(result.regions).toEqual([]);
+      // The code differs by platform, so pin the shape and the repo-relative
+      // path rather than one errno spelling.
+      expect(result.note).toMatch(
+        new RegExp(`^Error: could not read ${relPath} \\([A-Z]+\\)\\.$`),
+      );
+      expect(result.note).not.toContain(workspace);
     });
   });
 

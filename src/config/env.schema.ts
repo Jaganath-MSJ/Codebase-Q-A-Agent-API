@@ -7,7 +7,17 @@ const envSchema = z.object({
   EMBEDDING_PROVIDER: z.enum(['local', 'gemini']).default('local'),
   CHAT_PROVIDER: z.enum(['gemini', 'groq']).default('gemini'),
   DATA_DIR: z.string().default('./data'),
-  PORT: z.coerce.number().default(3000),
+  // Bounded deliberately (DEF-006): unbounded, every impossible value passed
+  // here and failed later inside `app.listen()`, where the error no longer
+  // names the variable that caused it. `0` is excluded on purpose — Node
+  // accepts it and binds an arbitrary free port, so it is the one bad value
+  // that *starts successfully*, on a port nobody can predict.
+  PORT: z.coerce
+    .number()
+    .int('PORT must be a whole number')
+    .min(1, 'PORT must be between 1 and 65535')
+    .max(65535, 'PORT must be between 1 and 65535')
+    .default(3000),
   NODE_ENV: z.string().default('development'),
   LLM_CACHE: z.enum(['on', 'off']).default('on'),
   // 32 random bytes, base64 — decoded and length-checked in credentials/crypto.util.ts,

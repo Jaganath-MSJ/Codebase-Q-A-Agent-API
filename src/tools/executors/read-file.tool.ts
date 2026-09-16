@@ -67,10 +67,28 @@ export async function readFileTool(
   try {
     ({ lines } = await readSourceFile(absPath));
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+    // Every branch answers with the path the MODEL supplied, never the absolute
+    // one the driver failed on — an `fs` error message embeds the latter, and a
+    // note is prompt text (DEF-004). `resolveInside` has already proved the
+    // target is inside the workspace, so the model is owed a real explanation.
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
       return { regions: [], note: `Error: file not found: ${relPath}` };
     }
-    throw err;
+    // The common one by far: an orienting model reads a directory before it has
+    // seen a file listing. Say so, and point at the tool that answers it.
+    if (code === 'EISDIR') {
+      return {
+        regions: [],
+        note: `Error: "${relPath}" is a directory, not a file. Use list_files to see what is inside it.`,
+      };
+    }
+    // EACCES, ELOOP, ENAMETOOLONG, EMFILE… — rare, and none of them is
+    // recoverable by the model, so the code is all it can usefully be told.
+    return {
+      regions: [],
+      note: `Error: could not read ${relPath}${code ? ` (${code})` : ''}.`,
+    };
   }
 
   const start = Math.max(

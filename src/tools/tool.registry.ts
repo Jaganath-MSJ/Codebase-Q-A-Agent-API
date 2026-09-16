@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { ToolCall, ToolDefinition } from '../llm/chat-provider.interface';
 import type {
   ToolExecutionResult,
@@ -17,6 +17,8 @@ import {
 
 @Injectable()
 export class ToolRegistry implements ToolExecutor {
+  private readonly logger = new Logger(ToolRegistry.name);
+
   readonly definitions: ToolDefinition[] = [
     SEARCH_CODE_TOOL,
     READ_FILE_TOOL,
@@ -65,8 +67,36 @@ export class ToolRegistry implements ToolExecutor {
           return { regions: [], note: `Error: unknown tool "${call.name}".` };
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      return { regions: [], note: `Error: ${message}` };
+      return { regions: [], note: this.safeErrorNote(call, err) };
     }
+  }
+
+  /**
+   * Builds the model-visible note for a failed tool call — without the driver's
+   * own message.
+   *
+   * A note is prompt text, so anything put here is disclosed to the provider and
+   * may be echoed back to the user. Driver messages are exactly the wrong shape
+   * for that: Node's `fs` errors embed the absolute workspace path (which
+   * CLAUDE.md keeps server-side), and drizzle builds its message as
+   * `Failed query: <SQL>\nparams: <bound params>` — where, for `search_code`,
+   * the params are the 768-float query embedding, enough on its own to blow past
+   * the agent loop's 4,000-character result budget.
+   *
+   * So the real error is logged server-side and the model gets the error CODE
+   * plus the argument it supplied itself, which is what it can actually act on.
+   * Codes (`EISDIR`, `EACCES`, `42P01`, …) carry no path or payload.
+   */
+  private safeErrorNote(call: ToolCall, err: unknown): string {
+    this.logger.error(
+      `Tool "${call.name}" failed: ${
+        err instanceof Error ? (err.stack ?? err.message) : String(err)
+      }`,
+    );
+
+    const code = (err as NodeJS.ErrnoException | undefined)?.code;
+    return code
+      ? `Error: ${call.name} failed (${code}).`
+      : `Error: ${call.name} failed.`;
   }
 }

@@ -190,12 +190,14 @@ describe('EventBusService', () => {
       expect(later).toEqual([created('j-1')]);
     });
 
-    it('TC-EVT-032 [DEFECT-007] surfaces the error as an unhandled process-level exception', async () => {
+    it('TC-EVT-032 surfaces the error as a process-level uncaughtException', async () => {
       // rxjs reports it via `reportUnhandledError`, which re-throws on a macro
-      // task. `main.ts` installs a backstop for `unhandledRejection` only, so
-      // nothing catches this and Node's default is to exit the process.
-      // Asserted by capturing the listeners rather than letting it escape and
-      // fail the run — the escape itself is the defect, documented in DEF-007.
+      // task. This is the bus's real escape route, and it is pinned here
+      // because DEF-007 turned on it: nothing used to catch that channel, so a
+      // single throwing subscriber exited the whole API. The backstop now lives
+      // in `common/process-backstops.ts` (TC-BACK-001/002) — this test still
+      // asserts the mechanism it has to catch, and captures the listeners
+      // rather than letting the error escape and fail the run.
       const bus = new EventBusService();
       const captured: Error[] = [];
       const original = process.listeners('uncaughtException');

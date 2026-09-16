@@ -1,19 +1,14 @@
 import { NestFactory } from '@nestjs/core';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import compression from 'compression';
 import { AppModule } from './app.module';
+import { installProcessBackstops } from './common/process-backstops';
 
-// Backstop for fire-and-forget background work (the setInterval pollers in
-// jobs/). Every such caller is expected to catch its own errors, but a missed
-// one would otherwise crash the whole API on a transient DB blip. Log and keep
-// the process alive rather than exiting on Node's default.
-const processLogger = new Logger('Process');
-process.on('unhandledRejection', (reason) => {
-  processLogger.error(
-    `Unhandled promise rejection: ${reason instanceof Error ? reason.stack : String(reason)}`,
-  );
-});
+// Keeps a transient failure in fire-and-forget background work from exiting the
+// API. Covers both the async and the synchronous channel — see the module for
+// why the pair has to be symmetric (DEF-007).
+installProcessBackstops();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
