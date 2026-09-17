@@ -63,12 +63,51 @@ describe('toLines', () => {
       for (const line of lines) expect(line).not.toContain('\r');
     });
 
-    it('TC-RF-014 [DEFECT-002] does NOT normalise a lone CR (classic-Mac endings)', () => {
-      // Documents current behaviour: only \r\n is rewritten. A CR-only file
-      // therefore collapses to a single line containing raw CR characters.
+    it('TC-RF-014 [DEFECT-002 fixed] splits a CR-only file (classic-Mac endings)', () => {
+      // Used to collapse to a single line containing raw CR characters, because
+      // only \r\n was rewritten.
       const { lines } = toLines('a\rb\rc');
-      expect(lines).toEqual(['a\rb\rc']);
-      expect(lines).toHaveLength(1);
+      expect(lines).toEqual(['a', 'b', 'c']);
+    });
+
+    it('TC-RF-015 [DEFECT-002 fix guard] keeps a lone CR inside an LF file as DATA', () => {
+      // The whole reason the fix is scoped rather than a blanket /\r\n?/g.
+      // A CR inside a file that already uses LF is content — it can sit inside
+      // a string literal or a here-doc. Rewriting it would split one source
+      // line into two and shift every line number after it, which is a worse
+      // defect than the one being fixed and is undetectable downstream.
+      const { lines } = toLines('a\rb\nc');
+      expect(lines).toEqual(['a\rb', 'c']);
+      expect(lines).toHaveLength(2);
+    });
+
+    it('TC-RF-016 [DEFECT-002 fix guard] keeps a lone CR inside a CRLF file as DATA', () => {
+      // Same rule after the CRLF pass has run: the file demonstrably uses LF as
+      // its terminator, so the leftover CR cannot be one.
+      const { lines } = toLines('a\rb\r\nc');
+      expect(lines).toEqual(['a\rb', 'c']);
+    });
+
+    it('TC-RF-017 [DEFECT-002 fix guard] a CR-only file still satisfies INV-9', () => {
+      // The property every consumer depends on: a range sliced out of `lines`
+      // must reconstruct exactly. A rewritten terminator is the obvious way to
+      // break it, so it is asserted on the rewritten shape specifically.
+      const { lines } = toLines('one\rtwo\rthree\rfour');
+      expect(lines.slice(1 - 1, 3).join('\n')).toBe('one\ntwo\nthree');
+      expect(lines.slice(2 - 1, 4).join('\n')).toBe('two\nthree\nfour');
+    });
+
+    it('TC-RF-018 [DEFECT-002 fix guard] handles a CR-only file with a trailing CR', () => {
+      // The trailing-terminator rule has to apply to the rewritten text too,
+      // or a CR-terminated file gains a phantom blank final line.
+      const { lines } = toLines('a\rb\r');
+      expect(lines).toEqual(['a', 'b']);
+    });
+
+    it('TC-RF-019 [DEFECT-002 fix guard] handles a BOM on a CR-only file', () => {
+      // Both normalisations on the same input, in the order they run.
+      const { lines } = toLines('\uFEFFa\rb');
+      expect(lines).toEqual(['a', 'b']);
     });
   });
 
