@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ProjectsService } from '../../src/projects/projects.service';
+import * as readFileModule from '../../src/common/read-file';
 
 /**
  * QA round 2 — TC-R2-0xx. The file-read surface of `GET /projects/:id/file`.
@@ -139,25 +140,53 @@ describe('TC-R2-0xx — GET /projects/:id/file read surface', () => {
     ).rejects.toMatchObject({ status: 404 });
   });
 
-  it('TC-R2-004 [DEFECT DEF-016] lets a directory path throw EISDIR instead of returning 404', async () => {
-    // DEF-016 (S3), still open. The catch in `getFile` maps exactly one errno —
-    // ENOENT. Every other fs failure propagates as an unhandled error, which
-    // Nest turns into a bare 500 ("Internal server error").
+  it('TC-R2-004 [DEF-016 FIXED] a directory where a file was indexed is a 404, not a 500', async () => {
+    // DEF-016 (S3), found 2026-09-17, fixed 2026-09-18. The catch in `getFile`
+    // mapped exactly one errno — ENOENT — so every other fs failure escaped as
+    // a bare 500 "Internal server error".
     //
-    // Note `'src'` is deliberately in INDEXED_PATHS: since the DEF-015 fix, an
+    // `'src'` is deliberately in INDEXED_PATHS: since the DEF-015 fix an
     // unindexed path is refused before any fs call, so the only way to reach
-    // this defect is a path that WAS indexed as a file and is now a directory
-    // on disk — a rename between indexing and viewing. That narrows DEF-016
-    // considerably but does not close it, which is why this still pins.
-    //
-    // INVERT THIS when DEF-016 is fixed: expect a 400/404 HttpException.
-    await expect(service.getFile(PROJECT_ID, 'src', 1, 2, 0)).rejects.toThrow();
+    // this at all is a path that WAS indexed as a file and is now a directory —
+    // a rename between indexing and viewing. That is exactly the stale-index
+    // condition the fix maps to 404.
     await expect(
       service.getFile(PROJECT_ID, 'src', 1, 2, 0),
-    ).rejects.not.toMatchObject({ status: 404 });
+    ).rejects.toMatchObject({ status: 404 });
   });
 
-  it('TC-R2-005 [DEF-016 half-closed by the DEF-015 fix] a NUL byte is now a 404, not a 500', async () => {
+  it('TC-R2-013 [DEF-016] the 404 names the cause without leaking the absolute path', async () => {
+    // The fix has to stay on the right side of the DEF-004 lesson: say enough
+    // that the client can act (re-index), without putting the host filesystem
+    // layout into a response body.
+    const error = await service
+      .getFile(PROJECT_ID, 'src', 1, 2, 0)
+      .then(() => null)
+      .catch((err: Error) => err);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error!.message).toContain('EISDIR');
+    expect(error!.message).toContain('src');
+    // The absolute host path must not appear — only the repo-relative one.
+    expect(error!.message).not.toContain(root);
+  });
+
+  it('TC-R2-014 [DEF-016] a genuinely unexpected error is still a 500, not flattened to 404', async () => {
+    // The half of the fix that is easy to get wrong: mapping *everything* to
+    // 404 would hide real server faults. Only the stale-index errnos are
+    // translated; an EIO must still surface as a fault.
+    const brokenService = buildService(root);
+    const io = Object.assign(new Error('disk exploded'), { code: 'EIO' });
+    vi.spyOn(readFileModule, 'readSourceFile').mockRejectedValueOnce(io);
+
+    await expect(
+      brokenService.getFile(PROJECT_ID, 'src/a.ts', 1, 2, 0),
+    ).rejects.toMatchObject({ code: 'EIO' });
+
+    vi.restoreAllMocks();
+  });
+
+  it('TC-R2-005 [DEF-016] a NUL byte in the path is a 404, not a 500', async () => {
     // This used to pin DEF-016's second half: Node rejects a path containing a
     // NUL with ERR_INVALID_ARG_VALUE, which is not ENOENT, so it escaped the
     // catch as a bare 500.

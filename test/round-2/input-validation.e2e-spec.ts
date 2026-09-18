@@ -145,18 +145,19 @@ describe('QA round 2 — input validation and existence checks', () => {
   });
 
   describe('TC-R2-11x — POST /projects sourceRef handling', () => {
-    it('TC-R2-110 [DEFECT DEF-018][INV-2] accepts a RELATIVE local_path', async () => {
-      // DEF-018 (S3). CLAUDE.md is explicit that `projects.workspace_path` /
-      // `source_ref` for a local_path project are **native absolute** machine
-      // paths. Nothing enforces it. A relative ref is resolved against the API
-      // process's cwd at materialize time, so the same project row points at a
-      // different directory — or nothing at all — the moment the server is
-      // started from anywhere else.
+    it('TC-R2-110 [DEF-018] sourceRef shape is NOT a DTO-layer rule', async () => {
+      // DEF-018 was fixed on 2026-09-18, but not here — the rule is conditional
+      // on `sourceKind`, so it lives in `ProjectsService.create` beside the
+      // pre-existing `zip_upload` check. This spec stubs that service wholesale
+      // (see the overrides above), so it is structurally incapable of seeing
+      // it: the relative path below still reaches the fake and still returns
+      // 201.
       //
-      // Verified live: a project created with './fixtures/tiny-repo' indexed
-      // successfully (11 files, 12 chunks, status ready) against `api/`'s cwd.
-      //
-      // INVERT THIS when DEF-018 is fixed: expect 400.
+      // Kept, rather than deleted, precisely to record that blind spot. The
+      // real assertions are TC-R2-201..204 in
+      // `test/round-2/project-create-validation.spec.ts`, which run the real
+      // service. A reader who finds only this test and concludes the value is
+      // unvalidated would be wrong, which is what the pointer is for.
       const res = await h.request(
         '/projects',
         json({
@@ -169,20 +170,14 @@ describe('QA round 2 — input validation and existence checks', () => {
       expect(lastCreate?.sourceRef).toBe('./fixtures/tiny-repo');
     });
 
-    it('TC-R2-111 [DEFECT DEF-018] accepts a local_path that cannot exist', async () => {
-      // The asymmetry this pins: `zip_upload` is validated eagerly at create
-      // time (with a comment explaining why a typo should not cost a queued
-      // job), while `local_path` and `git_url` are not. A user learns about a
-      // typo only after enqueueing an index that then fails.
+    it('TC-R2-111 [DEF-018] the DTO still rejects an empty sourceRef', async () => {
+      // What this layer genuinely owns: presence and type. Everything about the
+      // *shape* of the path is the service's, per TC-R2-110's note.
       const res = await h.request(
         '/projects',
-        json({
-          name: 'ghost',
-          sourceKind: 'local_path',
-          sourceRef: '/definitely/not/here/xyz',
-        }),
+        json({ name: 'ghost', sourceKind: 'local_path', sourceRef: '' }),
       );
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(400);
     });
 
     it('TC-R2-112 rejects a bogus zip_upload ref at create time (the correct behaviour)', async () => {

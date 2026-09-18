@@ -104,13 +104,20 @@ export class FailoverChatProvider implements ChatProvider {
     let emittedText = false;
     try {
       for await (const event of this.primary.stream(req, signal)) {
-        if (event.type === 'text') emittedText = true;
+        // DEF-017: keyed on characters actually emitted, not on a text event
+        // having arrived. A provider that opens with a zero-length delta and
+        // then fails has shown the reader nothing, so failing over splices
+        // nothing — the case this guard is protecting simply has not happened
+        // yet. Keying on arrival made a single empty delta disable failover for
+        // the whole turn, which is how a real Gemini 503 took down a turn with
+        // a healthy secondary configured.
+        if (event.type === 'text' && event.delta.length > 0) emittedText = true;
         yield event;
       }
       return;
     } catch (err) {
       // Never splice the secondary's output into a stream the client has
-      // already begun rendering — only fail over if no text delta was emitted.
+      // already begun rendering — only fail over if no text was emitted.
       if (emittedText || !this.canFailOver(req, err)) throw err;
     }
     yield* this.secondary.stream(req, signal);

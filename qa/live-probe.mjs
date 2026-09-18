@@ -123,16 +123,23 @@ async function probeProjects(fixtureDir) {
   await probe('LP-009', 'POST /projects rejects a bogus zip_upload ref', 400, () =>
     req('POST', '/projects', { body: { name: name(), sourceKind: 'zip_upload', sourceRef: '../../etc/passwd' } }));
 
-  // DEF-019 / DEF-018 — these SHOULD be 400s and are not. Kept as probes rather
-  // than removed, so the day they start returning 400 this script says so.
-  await probe('LP-010', '[DEF-019] whitespace-only name is accepted', 201, () =>
+  // DEF-019 is still open — these two SHOULD be 400s and are not. Kept as
+  // probes rather than removed, so the day they start returning 400 this script
+  // says so and the defect log gets updated with it.
+  await probe('LP-010', '[DEF-019 open] whitespace-only name is accepted', 201, () =>
     createProbeProject({ name: '   ', sourceKind: 'local_path', sourceRef: fixtureDir }));
-  await probe('LP-011', '[DEF-019] a 10,000-character name is accepted', 201, () =>
+  await probe('LP-011', '[DEF-019 open] a 10,000-character name is accepted', 201, () =>
     createProbeProject({ name: 'a'.repeat(10_000), sourceKind: 'local_path', sourceRef: fixtureDir }));
-  await probe('LP-012', '[DEF-018] a relative local_path is accepted', 201, () =>
+
+  // DEF-018, fixed 2026-09-18: the local_path source ref must be an absolute
+  // path to a real directory, checked at create time rather than discovered as
+  // a failed job minutes later.
+  await probe('LP-012', '[DEF-018 fixed] a relative local_path is rejected', 400, () =>
     createProbeProject({ name: name(), sourceKind: 'local_path', sourceRef: './fixtures/tiny-repo' }));
-  await probe('LP-013', '[DEF-018] a nonexistent local_path is accepted', 201, () =>
+  await probe('LP-013', '[DEF-018 fixed] a nonexistent local_path is rejected', 400, () =>
     createProbeProject({ name: name(), sourceKind: 'local_path', sourceRef: '/definitely/not/here/xyz' }));
+  await probe('LP-014', '[DEF-018 fixed] a local_path pointing at a file is rejected', 400, () =>
+    createProbeProject({ name: name(), sourceKind: 'local_path', sourceRef: `${fixtureDir}/package.json` }));
 
   await probe('LP-020', 'a unicode project name round-trips intact', (r) =>
     r.status === 200 && r.body.some((p) => p.name === 'qa-probe 🔬 проверка 中文'), async () => {

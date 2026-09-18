@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync, type Stats } from 'node:fs';
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 import { CredentialsService } from '../credentials/credentials.service';
@@ -56,6 +56,40 @@ export class ProjectsService {
       if (!existsSync(uploadPath)) {
         throw new BadRequestException(
           `Upload ${dto.sourceRef} not found — upload the zip first`,
+        );
+      }
+    }
+
+    // DEF-018. CLAUDE.md is explicit that `workspace_path`/`source_ref` for a
+    // local_path project is a **native absolute** machine path — it is the root
+    // every repo-relative path in the system resolves against. Nothing enforced
+    // it, so a relative ref was accepted and indexed happily, resolved against
+    // whatever the API process's cwd happened to be. The row then means
+    // something different the moment the server is started from elsewhere: the
+    // file viewer 404s, or — where two roots share a relative path — serves a
+    // *different* file under a citation that still looks valid.
+    //
+    // Validated here rather than in the DTO because the rule is conditional on
+    // `sourceKind`, which is exactly the shape the zip_upload check above
+    // already has. Same reasoning as that check, too: a typo should cost a 400
+    // now, not a queued job that fails minutes later.
+    if (sourceKind === 'local_path') {
+      if (!path.isAbsolute(dto.sourceRef)) {
+        throw new BadRequestException(
+          `local_path requires an absolute path, got: ${dto.sourceRef}`,
+        );
+      }
+      let stats: Stats;
+      try {
+        stats = statSync(dto.sourceRef);
+      } catch {
+        throw new BadRequestException(
+          `Local path does not exist or is not readable: ${dto.sourceRef}`,
+        );
+      }
+      if (!stats.isDirectory()) {
+        throw new BadRequestException(
+          `Local path is not a directory: ${dto.sourceRef}`,
         );
       }
     }
@@ -190,8 +224,47 @@ export class ProjectsService {
     try {
       ({ lines } = await readSourceFile(absPath));
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-        throw new NotFoundException(`File not found on disk: ${relPath}`);
+      // DEF-016. This catch handled exactly one errno, so every other fs
+      // failure escaped as a bare 500 "Internal server error" — no diagnosis
+      // for the client, and an error-rate spike for something that is often
+      // just a stale index.
+      //
+      // The membership gate above now rejects paths the project never indexed,
+      // which removes the easy ways to trigger this from outside. What remains
+      // is an indexed file whose on-disk state has since changed, and those are
+      // ordinary conditions rather than server faults:
+      //
+      //   ENOENT   deleted since indexing
+      //   EISDIR   replaced by a directory since indexing
+      //   ENOTDIR  a parent path segment became a file
+      //   EACCES / EPERM   permissions changed since indexing
+      //   ELOOP    replaced by a symlink cycle
+      //
+      // All map to 404: from the client's point of view the file it was told
+      // about is no longer viewable, and the remedy for every one of them is
+      // the same — re-index. Distinguishing them further would leak host
+      // filesystem detail (the DEF-004 lesson) without changing what anyone
+      // does about it. The message names the cause for the server log without
+      // embedding the absolute path.
+      //
+      // Anything NOT in this list is genuinely unexpected and still becomes a
+      // 500, on purpose: an EIO or an ENOMEM is a server fault and should look
+      // like one rather than being flattened into "not found".
+      const code = (err as NodeJS.ErrnoException).code;
+      const STALE_INDEX_CODES = new Set([
+        'ENOENT',
+        'EISDIR',
+        'ENOTDIR',
+        'EACCES',
+        'EPERM',
+        'ELOOP',
+        'ENAMETOOLONG',
+        'ERR_INVALID_ARG_VALUE',
+      ]);
+      if (code && STALE_INDEX_CODES.has(code)) {
+        throw new NotFoundException(
+          `File is no longer readable (${code}) — re-index the project: ${relPath}`,
+        );
       }
       throw err;
     }

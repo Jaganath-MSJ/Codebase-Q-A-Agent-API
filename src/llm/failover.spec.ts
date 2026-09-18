@@ -215,22 +215,17 @@ describe('FailoverChatProvider.stream', () => {
     expect(secondaryStream).not.toHaveBeenCalled();
   });
 
-  it('[DEFECT DEF-017] an EMPTY text delta still suppresses failover', async () => {
-    // DEF-017 (S3), QA round 2. `emittedText` is set by the *arrival* of a text
-    // event, not by it carrying any characters. A primary that opens its stream
-    // with a zero-length delta and then 503s therefore gets its error
-    // propagated, and the secondary is never tried — even though the client has
-    // rendered nothing at all, which is the exact condition the guard exists to
-    // detect ("never splice into a stream the client has already begun
-    // rendering").
+  it('[DEF-017 FIXED] an EMPTY text delta does NOT suppress failover', async () => {
+    // DEF-017 (S3), found 2026-09-17, fixed 2026-09-18. `emittedText` used to be
+    // set by the *arrival* of a text event rather than by it carrying any
+    // characters, so a primary that opened with a zero-length delta and then
+    // 503'd had its error propagated and the secondary never tried — even
+    // though the reader had seen nothing, which is the exact condition the
+    // guard exists to detect.
     //
-    // Found live on 2026-09-17: a real Gemini turn emitted one empty delta and
-    // then `503 UNAVAILABLE`; the turn failed with Groq available and healthy.
-    // The empty event IS forwarded downstream (see `seen` below) — but it
-    // carries zero characters, so the user has still seen nothing.
-    //
-    // INVERT THIS when DEF-017 is fixed (track cumulative delta length rather
-    // than event arrival): expect the secondary to serve the stream.
+    // Found live: a real Gemini turn emitted one empty delta and then
+    // `503 UNAVAILABLE`, and the turn failed with a healthy Groq secondary
+    // configured. This assertion was inverted as part of the fix.
     const secondaryStream = vi.fn(async function* () {
       yield { type: 'text', delta: 'SECONDARY' };
     });
@@ -242,21 +237,61 @@ describe('FailoverChatProvider.stream', () => {
     });
     const secondary = provider({ id: 'secondary', stream: secondaryStream });
 
-    const seen: ChatEvent[] = [];
-    await expect(
-      (async () => {
-        for await (const ev of new FailoverChatProvider(
-          primary,
-          secondary,
-        ).stream(REQ))
-          seen.push(ev);
-      })(),
-    ).rejects.toMatchObject({ status: 503 });
+    const seen = await collect(
+      new FailoverChatProvider(primary, secondary).stream(REQ),
+    );
 
-    // Zero characters reached the client, yet the secondary was never asked.
-    expect(seen).toEqual([{ type: 'text', delta: '' }]);
-    expect(seen.map((e) => ('delta' in e ? e.delta : '')).join('')).toBe('');
+    expect(secondaryStream).toHaveBeenCalled();
+    // The empty delta is still forwarded — it is harmless and dropping it would
+    // be a second, unrelated behaviour change. What matters is that the
+    // secondary's text follows it.
+    expect(seen.map((e) => ('delta' in e ? e.delta : '')).join('')).toBe(
+      'SECONDARY',
+    );
+  });
+
+  it('[DEF-017] a NON-empty delta still suppresses failover', async () => {
+    // The other side of the same line, kept adjacent so the fix cannot drift
+    // into "always fail over". One real character is enough to make splicing
+    // visible to the reader, and that must still propagate the error.
+    const secondaryStream = vi.fn();
+    const primary = provider({
+      stream: async function* () {
+        yield { type: 'text', delta: 'A' };
+        throw status(503);
+      },
+    });
+    const secondary = provider({ id: 'secondary', stream: secondaryStream });
+
+    await expect(
+      collect(new FailoverChatProvider(primary, secondary).stream(REQ)),
+    ).rejects.toMatchObject({ status: 503 });
     expect(secondaryStream).not.toHaveBeenCalled();
+  });
+
+  it('[DEF-017] several empty deltas then a failure still fails over', async () => {
+    // Guards the difference between "length > 0 on this event" and any
+    // accumulate-then-compare variant a later refactor might reach for.
+    const secondaryStream = vi.fn(async function* () {
+      yield { type: 'text', delta: 'SECONDARY' };
+    });
+    const primary = provider({
+      stream: async function* () {
+        yield { type: 'text', delta: '' };
+        yield { type: 'text', delta: '' };
+        yield { type: 'text', delta: '' };
+        throw status(429);
+      },
+    });
+    const secondary = provider({ id: 'secondary', stream: secondaryStream });
+
+    const seen = await collect(
+      new FailoverChatProvider(primary, secondary).stream(REQ),
+    );
+    expect(secondaryStream).toHaveBeenCalled();
+    expect(seen.map((e) => ('delta' in e ? e.delta : '')).join('')).toBe(
+      'SECONDARY',
+    );
   });
 
   it('does NOT fail over a tool request to a non-tool secondary (stream)', async () => {
