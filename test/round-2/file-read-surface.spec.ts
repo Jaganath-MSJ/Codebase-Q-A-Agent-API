@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ProjectsService } from '../../src/projects/projects.service';
@@ -26,8 +26,21 @@ const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
 let root: string;
 let service: ProjectsService;
 
-/** Only the two repository methods `getFile` actually reaches. */
+/**
+ * Only the repository methods `getFile` actually reaches.
+ *
+ * `indexedPaths` is the set of paths the project is pretending to have indexed
+ * — the DEF-015 fix gates every read on membership in `files`, so a test that
+ * wants to read a file must list it here. That is the point: `.env` is absent
+ * from this set for exactly the reason it is absent from a real index.
+ */
+const INDEXED_PATHS = new Set(['src/a.ts', 'src/missing.ts', 'src']);
+
 function buildService(workspacePath: string): ProjectsService {
+  const filesRepository = {
+    existsByPath: (_projectId: string, path: string) =>
+      Promise.resolve(INDEXED_PATHS.has(path)),
+  };
   const projectsRepository = {
     findById: (id: string) =>
       Promise.resolve(
@@ -49,6 +62,7 @@ function buildService(workspacePath: string): ProjectsService {
     {} as never,
     {} as never,
     { dataDir: workspacePath } as never,
+    filesRepository as never,
   );
 }
 
@@ -87,27 +101,54 @@ describe('TC-R2-0xx — GET /projects/:id/file read surface', () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 
-  it('TC-R2-003 [SEC][DEFECT DEF-015] serves a NEVER-INDEXED .env under the project root', async () => {
-    // DEF-015 (S2). `getFile` checks containment and nothing else: there is no
-    // lookup against `files`/`chunks` to confirm the path is one this project
-    // actually indexed. Every secret the walker was careful to exclude is
-    // therefore readable through a public GET by anyone who can guess its path.
+  it('TC-R2-003 [SEC][DEF-015 FIXED] refuses a NEVER-INDEXED .env under the project root', async () => {
+    // DEF-015 (S2), found 2026-09-17, fixed 2026-09-18. `getFile` used to check
+    // containment and nothing else — no lookup against `files` to confirm the
+    // path was one this project actually indexed — so every secret the walker
+    // was careful to exclude was readable through a plain GET by anyone who
+    // could guess its path. Verified live at the time: a real `api/.env` came
+    // back as HTTP 200 with the live database URL and provider keys in `lines`.
     //
-    // Verified live against the running app on 2026-09-17: a real `api/.env`
-    // came back over HTTP 200 with the live database URL and provider keys in
-    // the `lines` array.
-    //
-    // INVERT THIS when DEF-015 is fixed: the call must reject with 404.
-    const { dto } = await service.getFile(PROJECT_ID, '.env', 1, 2, 0);
-    expect(dto?.lines.join('\n')).toContain('GOOGLE_API_KEY');
-    expect(dto?.lines.join('\n')).toContain('hunter2');
+    // This assertion was inverted as part of the fix. It now proves the gate
+    // holds: `.env` exists on disk under the root and is readable, and the only
+    // reason it is refused is that it is not in `INDEXED_PATHS`.
+    await expect(
+      service.getFile(PROJECT_ID, '.env', 1, 2, 0),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('TC-R2-011 [SEC][DEF-015] the refusal is membership, not existence', async () => {
+    // The distinction worth pinning: the file is present, readable, and inside
+    // the root — `resolveInside` is perfectly happy with it. Only the index
+    // lookup refuses it. If someone later "simplifies" the fix into an
+    // existence or extension check, this fails.
+    const onDisk = await readFile(path.join(root, '.env'), 'utf8');
+    expect(onDisk).toContain('GOOGLE_API_KEY');
+
+    await expect(
+      service.getFile(PROJECT_ID, '.env', 1, 2, 0),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('TC-R2-012 [SEC][DEF-015] an unindexed path is refused before any ETag is issued', async () => {
+    // The check sits ahead of the ETag on purpose. Were it after, a client
+    // holding a stale validator for a path that is no longer viewable would get
+    // a 304 — cheap, but still an answer about a file it may not see.
+    await expect(
+      service.getFile(PROJECT_ID, '.env', 1, 2, 0, '"anything"'),
+    ).rejects.toMatchObject({ status: 404 });
   });
 
   it('TC-R2-004 [DEFECT DEF-016] lets a directory path throw EISDIR instead of returning 404', async () => {
-    // DEF-016 (S3). The catch in `getFile` maps exactly one errno — ENOENT.
-    // Every other fs failure propagates as an unhandled error, which Nest turns
-    // into a bare 500 ("Internal server error"). Reproduced live: a request for
-    // a directory returns 500 where a missing file correctly returns 404.
+    // DEF-016 (S3), still open. The catch in `getFile` maps exactly one errno —
+    // ENOENT. Every other fs failure propagates as an unhandled error, which
+    // Nest turns into a bare 500 ("Internal server error").
+    //
+    // Note `'src'` is deliberately in INDEXED_PATHS: since the DEF-015 fix, an
+    // unindexed path is refused before any fs call, so the only way to reach
+    // this defect is a path that WAS indexed as a file and is now a directory
+    // on disk — a rename between indexing and viewing. That narrows DEF-016
+    // considerably but does not close it, which is why this still pins.
     //
     // INVERT THIS when DEF-016 is fixed: expect a 400/404 HttpException.
     await expect(service.getFile(PROJECT_ID, 'src', 1, 2, 0)).rejects.toThrow();
@@ -116,13 +157,20 @@ describe('TC-R2-0xx — GET /projects/:id/file read surface', () => {
     ).rejects.not.toMatchObject({ status: 404 });
   });
 
-  it('TC-R2-005 [DEFECT DEF-016] lets a NUL byte in the path throw instead of returning 400', async () => {
-    // Same root cause as TC-R2-004. Node rejects a path containing a NUL with
-    // ERR_INVALID_ARG_VALUE; it is not ENOENT, so it escapes as a 500.
+  it('TC-R2-005 [DEF-016 half-closed by the DEF-015 fix] a NUL byte is now a 404, not a 500', async () => {
+    // This used to pin DEF-016's second half: Node rejects a path containing a
+    // NUL with ERR_INVALID_ARG_VALUE, which is not ENOENT, so it escaped the
+    // catch as a bare 500.
+    //
+    // The DEF-015 membership gate closed it as a side effect — a NUL-bearing
+    // path is in no index, so it is refused before `readSourceFile` is ever
+    // called. Recorded here rather than deleted, because the underlying
+    // errno-mapping defect is still open (TC-R2-004) and someone reading
+    // DEF-016 needs to know which half of it this route can still reach.
     const withNul = 'src/a.ts' + String.fromCharCode(0) + '.png';
     await expect(
       service.getFile(PROJECT_ID, withNul, 1, 2, 0),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ status: 404 });
   });
 
   it('TC-R2-006 a missing file is still correctly a 404', async () => {

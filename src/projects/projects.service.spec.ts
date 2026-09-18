@@ -7,6 +7,7 @@ import { ProjectsService } from './projects.service';
 import type { ProjectsRepository } from '../db/repositories/projects.repository';
 import type { CredentialsService } from '../credentials/credentials.service';
 import type { StorageRepository } from '../db/repositories/storage.repository';
+import type { FilesRepository } from '../db/repositories/files.repository';
 import type { ConfigService } from '../config/config.service';
 
 const REV = 'rev-abc';
@@ -19,11 +20,19 @@ function build(project: Record<string, unknown> | null) {
   const projectsRepository = {
     findById: vi.fn().mockResolvedValue(project),
   } as unknown as ProjectsRepository;
+  // Since the DEF-015 fix every read is gated on the path being in the
+  // project's index. These tests are about the ETag and the 200 read path, so
+  // the gate is held open here deliberately — the gate's own behaviour is
+  // covered in `test/round-2/file-read-surface.spec.ts`.
+  const filesRepository = {
+    existsByPath: vi.fn().mockResolvedValue(true),
+  } as unknown as FilesRepository;
   return new ProjectsService(
     projectsRepository,
     {} as CredentialsService,
     {} as StorageRepository,
     {} as ConfigService,
+    filesRepository,
   );
 }
 

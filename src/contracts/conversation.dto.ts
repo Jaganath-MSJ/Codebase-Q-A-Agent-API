@@ -8,6 +8,7 @@ import {
   IsString,
   IsUUID,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class ConversationDto {
   @ApiProperty()
@@ -114,6 +115,19 @@ export class MessageDto {
 export class PostMessageDto {
   @ApiProperty({ description: 'Question in plain English' })
   @IsString()
+  // DEF-025. `@IsNotEmpty()` alone rejects '' but passes '   ', so a
+  // whitespace-only question ran the whole pipeline — condense, retrieve,
+  // generate — against a free tier, and the model dutifully answered that no
+  // question had been asked. Trimming before the check closes that and
+  // normalises the rest: a question pasted with a trailing newline is the same
+  // question, so it should hash to the same LLM cache key and reach the prompt
+  // builder identically. Guarded on `typeof` because a non-string still has to
+  // reach `@IsString()` to be reported as a type error rather than a crash.
+  // `value` is annotated because class-transformer types it as `any`, and
+  // returning that trips @typescript-eslint/no-unsafe-return.
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsNotEmpty()
   question!: string;
 

@@ -178,13 +178,22 @@ async function probeFileRoute(projectId) {
   await probe('LP-123', 'GET /file rejects a fractional startLine', 400, () => file({ path: 'README.md', startLine: 1.5, endLine: 5 }));
   await probe('LP-124', 'GET /file 404s a file that is not on disk', 404, () => file({ path: 'no/such/file.ts', startLine: 1, endLine: 3 }));
 
-  // The two DEF-016 probes below expect a 500 *on purpose*: they assert the
-  // defect, so that fixing it turns them red and forces the update here and in
-  // DEFECTS.md together. `api/src` and the NUL path are chosen because both
-  // exist under every project root this script might be pointed at.
-  await probe('LP-125', '[DEF-016] a directory path 500s instead of 404ing', 500, () => file({ path: 'api/src', startLine: 1, endLine: 3 }));
-  await probe('LP-126', '[DEF-016] a NUL byte in the path 500s instead of 400ing', 500, () =>
+  // These two asserted 500s until the DEF-015 fix (2026-09-18), which closed
+  // both at this route: an unindexed path — and a directory or a NUL-bearing
+  // string is never indexed — is now refused before any fs or driver call.
+  //
+  // DEF-016 itself is still open. Its remaining reach is an indexed file whose
+  // on-disk state changed after indexing (replaced by a directory, or made
+  // unreadable), which no black-box probe can set up safely; that half is
+  // pinned as a unit test in `test/round-2/file-read-surface.spec.ts`.
+  await probe('LP-125', '[DEF-015 fix] an unindexed directory path is 404, not 500', 404, () =>
+    file({ path: 'api/src', startLine: 1, endLine: 3 }));
+  await probe('LP-126', '[DEF-015 fix] a NUL byte in the path is 404, not a driver 500', 404, () =>
     file({ path: `README.md${NUL}.png`, startLine: 1, endLine: 3 }));
+  await probe('LP-128', '[DEF-015] a never-indexed secret under the root is refused', 404, () =>
+    file({ path: 'api/.env', startLine: 1, endLine: 3 }));
+  await probe('LP-129', '[DEF-015] an unindexed node_modules file is refused', 404, () =>
+    file({ path: 'web/node_modules/.package-lock.json', startLine: 1, endLine: 3 }));
   await probe('LP-127', 'a duplicate path param cannot smuggle a traversal', refusedWithoutLeaking, () =>
     req('GET', `/projects/${projectId}/file?path=README.md&path=../../../etc/passwd&startLine=1&endLine=3`));
 }
@@ -244,6 +253,8 @@ async function probeChat(projectId) {
   // call, which is also what keeps this script free to run.
   const post = (body) => req('POST', `/conversations/${id}/messages`, { body });
   await probe('LP-310', 'an empty question is rejected', 400, () => post({ question: '' }));
+  await probe('LP-316', '[DEF-025 fixed] a whitespace-only question is rejected', 400, () => post({ question: '   ' }));
+  await probe('LP-317', '[DEF-025 fixed] a tab/newline-only question is rejected', 400, () => post({ question: '\t\n' }));
   await probe('LP-311', 'a missing question is rejected', 400, () => post({}));
   await probe('LP-312', 'a non-string question is rejected', 400, () => post({ question: 42 }));
   await probe('LP-313', 'an unknown mode is rejected', 400, () => post({ question: 'hi', mode: 'telepathy' }));

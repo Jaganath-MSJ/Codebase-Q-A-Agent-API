@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../pool';
 import { DB_TOKEN } from '../tokens';
 import { chunks, files, FileRow, NewChunkRow, NewFileRow } from '../schema';
@@ -17,6 +17,25 @@ export class FilesRepository {
   async insertMany(rows: NewFileRow[]): Promise<FileRow[]> {
     if (rows.length === 0) return [];
     return this.db.insert(files).values(rows).returning();
+  }
+
+  /**
+   * Is this exact repo-relative path one the project actually indexed?
+   *
+   * The gate for DEF-015. A `files` row exists only for a path that survived
+   * the walker's filtering, so this is precisely "the project indexed it" —
+   * gitignored, binary and excluded files (`.env` among them) never get one.
+   * Matching is exact, not normalised: every path a client can legitimately
+   * send came from a citation or a search hit, and those are these same stored
+   * strings.
+   */
+  async existsByPath(projectId: string, path: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: files.id })
+      .from(files)
+      .where(and(eq(files.projectId, projectId), eq(files.path, path)))
+      .limit(1);
+    return row !== undefined;
   }
 
   async findAllByProjectId(projectId: string): Promise<ExistingFile[]> {

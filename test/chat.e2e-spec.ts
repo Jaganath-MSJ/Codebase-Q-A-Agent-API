@@ -377,6 +377,32 @@ describe('Chat routes and SSE', () => {
       expect((await post({ question: 42 })).status).toBe(400);
     });
 
+    it('TC-CHAT-206 [DEF-025 FIXED] rejects a whitespace-only question', async () => {
+      // DEF-025, found in QA round 2 and fixed 2026-09-18. `@IsNotEmpty()`
+      // alone rejects '' but passes '   ', so a question made only of spaces,
+      // tabs or newlines ran the whole pipeline — condense, retrieve, generate
+      // — against a 900/day free tier, and the model answered that no question
+      // had been asked. The web client already disabled Send for blank input
+      // (TC-E2E-305), which meant the client was the ONLY thing enforcing it.
+      //
+      // Now trimmed before the check, so each of these is an empty question.
+      for (const question of ['   ', '\t', '\n', ' \t\n ', '\u00a0'.trim()]) {
+        const res = await post({ question });
+        expect(res.status, `expected 400 for ${JSON.stringify(question)}`).toBe(
+          400,
+        );
+      }
+    });
+
+    it('TC-CHAT-207 [DEF-025] a whitespace-only question never reaches the chat service', async () => {
+      // The point of the fix is cost, not tidiness: the rejection has to happen
+      // at the DTO, before anything that could spend a provider call. Asserting
+      // the 400 alone would still pass if the pipeline ran and then failed.
+      streamCalls = [];
+      await post({ question: '     ' });
+      expect(streamCalls).toEqual([]);
+    });
+
     it('TC-CHAT-203 rejects an unknown mode', async () => {
       expect((await post({ question: 'hi', mode: 'turbo' })).status).toBe(400);
     });
@@ -452,6 +478,14 @@ describe('Chat routes and SSE', () => {
       const question = 'Where is validateUser defined?';
       await post({ question });
       expect(lastQuestion).toBe(question);
+    });
+
+    it('TC-CHAT-227 [DEF-025] trims surrounding whitespace before the service sees it', async () => {
+      // The other half of the DEF-025 fix. A question pasted with a trailing
+      // newline is the same question, so it should reach the prompt builder —
+      // and therefore the LLM cache key — identically to one typed without it.
+      await post({ question: '  Where is validateUser defined?\n' });
+      expect(lastQuestion).toBe('Where is validateUser defined?');
     });
 
     it('TC-CHAT-226 tags the first frame with the resolved mode', async () => {

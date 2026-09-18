@@ -7,6 +7,7 @@ import { existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 import { CredentialsService } from '../credentials/credentials.service';
+import { FilesRepository } from '../db/repositories/files.repository';
 import { ProjectsRepository } from '../db/repositories/projects.repository';
 import { StorageRepository } from '../db/repositories/storage.repository';
 import { ProjectRow } from '../db/schema';
@@ -27,6 +28,7 @@ export class ProjectsService {
     private readonly credentialsService: CredentialsService,
     private readonly storageRepository: StorageRepository,
     private readonly config: ConfigService,
+    private readonly filesRepository: FilesRepository,
   ) {}
 
   async create(dto: CreateProjectDto): Promise<ProjectRow> {
@@ -126,17 +128,13 @@ export class ProjectsService {
     const project = await this.projectsRepository.findById(projectId);
     if (!project) throw new NotFoundException(`Project ${projectId} not found`);
 
-    // Strong validator (Phase 13.6): file content is immutable within an index,
-    // so headRevision (the content-tree hash, bumped on every re-index) plus the
-    // exact view coordinates uniquely identify this response. A matching
-    // If-None-Match therefore lets us answer 304 without even reading the file.
-    const marker = project.headRevision ?? '';
-    const etag = `"${createHash('sha256')
-      .update(`${marker}|${relPath}|${startLine}|${endLine}|${context}`)
-      .digest('hex')
-      .slice(0, 32)}"`;
-    if (ifNoneMatch && ifNoneMatch === etag) return { etag, dto: null };
-
+    // Three gates, in this order, and the order matters.
+    //
+    // 1. Containment. Pure path arithmetic, no I/O. Kept first so a path that
+    //    escapes the root keeps answering 400 "escapes the project root" — that
+    //    is an established contract with its own tests, and it says something
+    //    different from "not found".
+    //
     // `workspacePath` is where the adapter actually put the files on disk —
     // for git_url that's `data/workspaces/<id>`, not the clone URL in
     // `sourceRef`. It's only null for a project that has never been indexed,
@@ -150,6 +148,43 @@ export class ProjectsService {
         `Path escapes the project root: ${relPath}`,
       );
     }
+
+    // 2. Membership — DEF-015. Containment is not membership: proving a path
+    //    cannot escape the root says nothing about whether the project actually
+    //    indexed it. Without this the route served every readable file under the
+    //    root, including the ones the walker deliberately excludes, so a project
+    //    rooted at a repository holding an `.env` handed out its database URL
+    //    and API keys over a plain GET.
+    //
+    //    Ahead of the ETag so a stale validator cannot answer 304 for a path
+    //    that is not viewable at all, and ahead of every `fs` call so an
+    //    unindexed path never reaches the filesystem.
+    //
+    //    A NUL byte is screened out before the query rather than handed to the
+    //    driver: Postgres rejects NUL inside a text parameter outright
+    //    (`report_invalid_encoding_int`), so passing one through would turn
+    //    hostile input into an unhandled driver error and a bare 500. No
+    //    indexed path can contain one — the column could not store it — so
+    //    "not indexed" is both the true and the safe answer.
+    const indexed =
+      !relPath.includes('\0') &&
+      (await this.filesRepository.existsByPath(projectId, relPath));
+    if (!indexed) {
+      throw new NotFoundException(
+        `File not in this project's index: ${relPath}`,
+      );
+    }
+
+    // 3. Freshness. Strong validator (Phase 13.6): file content is immutable
+    //    within an index, so headRevision (the content-tree hash, bumped on
+    //    every re-index) plus the exact view coordinates uniquely identify this
+    //    response. A matching If-None-Match lets us answer 304 without reading.
+    const marker = project.headRevision ?? '';
+    const etag = `"${createHash('sha256')
+      .update(`${marker}|${relPath}|${startLine}|${endLine}|${context}`)
+      .digest('hex')
+      .slice(0, 32)}"`;
+    if (ifNoneMatch && ifNoneMatch === etag) return { etag, dto: null };
 
     let lines: string[];
     try {
