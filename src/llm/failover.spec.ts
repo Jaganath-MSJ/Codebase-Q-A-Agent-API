@@ -215,6 +215,50 @@ describe('FailoverChatProvider.stream', () => {
     expect(secondaryStream).not.toHaveBeenCalled();
   });
 
+  it('[DEFECT DEF-017] an EMPTY text delta still suppresses failover', async () => {
+    // DEF-017 (S3), QA round 2. `emittedText` is set by the *arrival* of a text
+    // event, not by it carrying any characters. A primary that opens its stream
+    // with a zero-length delta and then 503s therefore gets its error
+    // propagated, and the secondary is never tried — even though the client has
+    // rendered nothing at all, which is the exact condition the guard exists to
+    // detect ("never splice into a stream the client has already begun
+    // rendering").
+    //
+    // Found live on 2026-09-17: a real Gemini turn emitted one empty delta and
+    // then `503 UNAVAILABLE`; the turn failed with Groq available and healthy.
+    // The empty event IS forwarded downstream (see `seen` below) — but it
+    // carries zero characters, so the user has still seen nothing.
+    //
+    // INVERT THIS when DEF-017 is fixed (track cumulative delta length rather
+    // than event arrival): expect the secondary to serve the stream.
+    const secondaryStream = vi.fn(async function* () {
+      yield { type: 'text', delta: 'SECONDARY' };
+    });
+    const primary = provider({
+      stream: async function* () {
+        yield { type: 'text', delta: '' };
+        throw status(503);
+      },
+    });
+    const secondary = provider({ id: 'secondary', stream: secondaryStream });
+
+    const seen: ChatEvent[] = [];
+    await expect(
+      (async () => {
+        for await (const ev of new FailoverChatProvider(
+          primary,
+          secondary,
+        ).stream(REQ))
+          seen.push(ev);
+      })(),
+    ).rejects.toMatchObject({ status: 503 });
+
+    // Zero characters reached the client, yet the secondary was never asked.
+    expect(seen).toEqual([{ type: 'text', delta: '' }]);
+    expect(seen.map((e) => ('delta' in e ? e.delta : '')).join('')).toBe('');
+    expect(secondaryStream).not.toHaveBeenCalled();
+  });
+
   it('does NOT fail over a tool request to a non-tool secondary (stream)', async () => {
     const secondaryStream = vi.fn();
     const primary = provider({

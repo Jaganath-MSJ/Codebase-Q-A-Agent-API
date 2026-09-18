@@ -18,7 +18,8 @@
     "eval": "ts-node -r tsconfig-paths/register evals/run-eval.ts",
     "eval:answers": "ts-node -r tsconfig-paths/register evals/run-answer-eval.ts",
     "bench": "ts-node -r tsconfig-paths/register evals/bench-retrieval.ts",
-    "bench:index": "ts-node -r tsconfig-paths/register evals/bench-index.ts"
+    "bench:index": "ts-node -r tsconfig-paths/register evals/bench-index.ts",
+    "qa:live": "node qa/live-probe.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.15.0",
