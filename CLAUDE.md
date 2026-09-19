@@ -26,14 +26,16 @@ expect(lines.slice(chunk.startLine - 1, chunk.endLine).join('\n')).toBe(chunk.co
 ## Commands
 
 ```bash
-npm run dev            # API on :3000, docs at /api/docs
+npm run start:dev      # API on :3000, docs at /api/docs (watch mode)
 npm run test           # vitest
 npm run db:generate    # drizzle-kit generate — then hand-edit for extensions/indexes
 npm run db:migrate
 npm run eval            # retrieval recall harness (Phase 5)
 npm run eval:answers    # answer-quality LLM judge (Phase 8) — manual, not a CI gate
+npm run bench            # retrieval latency/quality benchmark
+npm run bench:index      # indexing throughput benchmark
 ```
 
 ## Environment
 
-Windows, Node 22, no Docker, no Python, no native build tools. `node-gyp` is disqualifying.
+macOS, Node 22. Database is hosted Postgres on Neon. From the workspace root, `./dev.sh` or `npm run dev` starts this alongside `web/` in watch mode, each in its own Terminal.app tab.
