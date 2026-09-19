@@ -25,6 +25,11 @@ function toStopReason(reason: string | null | undefined): ChatStopReason {
 export class GroqChatProvider implements ChatProvider {
   readonly id = `groq:${MODEL_ID}`;
   readonly contextWindow = 131_072;
+  // DEF-029. The free tier caps tokens-per-minute far below the model's context
+  // window, so a normal RAG prompt (measured at ~11.3k tokens on this project)
+  // is refused with a 413 even though it would fit the model comfortably. Only
+  // meaningful as a failover gate — see fitsWithinBudget in provider-error.ts.
+  readonly maxRequestTokens = 8_000;
   readonly supportsTools = false;
 
   private readonly client: Groq;

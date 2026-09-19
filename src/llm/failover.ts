@@ -4,6 +4,7 @@ import type {
   ChatProvider,
   ChatRequest,
 } from './chat-provider.interface';
+import { fitsWithinBudget } from './provider-error';
 
 /**
  * Retriable = the provider is temporarily unavailable or quota-limited, not a
@@ -82,6 +83,17 @@ export class FailoverChatProvider implements ChatProvider {
     // Never route a tool-carrying request to a provider that can't do tools
     // (Groq is supportsTools:false) — it would silently drop the tools.
     if (req.tools?.length && !this.secondary.supportsTools) return false;
+    // DEF-029. `contextWindow` covers what the MODEL can hold; it says nothing
+    // about what the secondary's plan will accept in one request. Groq's free
+    // tier caps at 8,000 tokens/minute while its context window is 131,072, so
+    // an ordinary RAG prompt (~11.3k tokens here) was failing over from a
+    // healthy-but-busy primary only to be refused with a 413 — a wasted call,
+    // and a worse error than the one it replaced.
+    //
+    // Declining here means the user sees the primary's honest "temporarily
+    // unavailable" instead. It does NOT make failover useless: smaller turns,
+    // which are most of them, still fail over and succeed.
+    if (!fitsWithinBudget(req, this.secondary.maxRequestTokens)) return false;
     return true;
   }
 

@@ -86,6 +86,13 @@ export type ChatEvent =
 export interface ChatProvider {
   readonly id: string;
   readonly contextWindow: number;
+  /**
+   * Optional per-request ceiling imposed by the plan, NOT by the model —
+   * typically a free-tier tokens-per-minute limit, which is usually far
+   * smaller than `contextWindow`. Used to decide whether a failover to this
+   * provider is worth attempting (DEF-029). Undefined means unconstrained.
+   */
+  readonly maxRequestTokens?: number;
   readonly supportsTools: boolean;
   stream(req: ChatRequest, signal?: AbortSignal): AsyncIterable<ChatEvent>;
   complete(req: ChatRequest, signal?: AbortSignal): Promise<ChatCompletion>;

@@ -317,6 +317,94 @@ describe('FailoverChatProvider.stream', () => {
   });
 });
 
+describe('FailoverChatProvider — DEF-029 secondary request budget', () => {
+  const big: ChatRequest = {
+    system: 'x'.repeat(30_000),
+    user: 'y'.repeat(15_140),
+  };
+
+  it('does NOT fail over a request larger than the secondary will accept', async () => {
+    // DEF-029. contextWindow describes the MODEL; maxRequestTokens describes
+    // the PLAN. Groq's free tier caps at 8k tokens/minute against a 131k
+    // context, so an ordinary ~11.3k-token RAG prompt was failing over from a
+    // busy primary only to be refused with a 413 — a wasted call, and a worse
+    // error than the one it replaced.
+    const secondaryComplete = vi.fn();
+    const primary = provider({
+      complete: vi.fn().mockRejectedValue(status(503)),
+    });
+    const secondary = provider({
+      id: 'secondary',
+      maxRequestTokens: 8_000,
+      complete: secondaryComplete,
+    });
+
+    // The primary's own error propagates, which is the honest one to show.
+    await expect(
+      new FailoverChatProvider(primary, secondary).complete(big),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(secondaryComplete).not.toHaveBeenCalled();
+  });
+
+  it('still fails over a request that fits the budget', async () => {
+    // The guard must not disable failover generally — most turns are small.
+    const small: ChatRequest = {
+      system: 'x'.repeat(400),
+      user: 'y'.repeat(400),
+    };
+    const complete = vi
+      .fn()
+      .mockResolvedValue({ text: 'SECONDARY', usage: {} });
+    const primary = provider({
+      complete: vi.fn().mockRejectedValue(status(503)),
+    });
+    const secondary = provider({
+      id: 'secondary',
+      maxRequestTokens: 8_000,
+      complete,
+    });
+
+    const res = await new FailoverChatProvider(primary, secondary).complete(
+      small,
+    );
+    expect(res.text).toBe('SECONDARY');
+  });
+
+  it('treats a secondary with no declared budget as unconstrained', async () => {
+    const complete = vi
+      .fn()
+      .mockResolvedValue({ text: 'SECONDARY', usage: {} });
+    const primary = provider({
+      complete: vi.fn().mockRejectedValue(status(503)),
+    });
+    const secondary = provider({ id: 'secondary', complete });
+
+    const res = await new FailoverChatProvider(primary, secondary).complete(
+      big,
+    );
+    expect(res.text).toBe('SECONDARY');
+  });
+
+  it('applies the budget to streaming too', async () => {
+    const secondaryStream = vi.fn();
+    const primary = provider({
+      stream: async function* () {
+        throw status(503);
+      },
+    });
+    const secondary = provider({
+      id: 'secondary',
+      maxRequestTokens: 8_000,
+      stream: secondaryStream,
+    });
+
+    await expect(
+      collect(new FailoverChatProvider(primary, secondary).stream(big)),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(secondaryStream).not.toHaveBeenCalled();
+  });
+});
+
 describe('FailoverChatProvider metadata', () => {
   it('takes id from primary, contextWindow = min, supportsTools = either', () => {
     const primary = provider({

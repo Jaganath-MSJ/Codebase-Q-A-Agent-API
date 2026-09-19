@@ -31,6 +31,7 @@ import {
 } from './prompt.builder';
 import { parseCitations, type Citation } from '../common/citation-parser';
 import { redactSecrets } from '../common/redact';
+import { userFacingProviderMessage } from '../llm/provider-error';
 import {
   buildConversationMarkdown,
   type ExportCitation,
@@ -441,12 +442,7 @@ export class ChatService {
         );
         return;
       }
-      // Redact before it's streamed to the client and persisted (markError) —
-      // a provider/git error can echo a credential in its own message text,
-      // same hazard WorkerService.recordFailure already guards against.
-      const message = redactSecrets(
-        err instanceof Error ? err.message : 'Unknown error',
-      );
+      const message = this.clientFacingError(err);
       await this.messagesRepository.markError(
         assistantMessage.id,
         buffer,
@@ -707,12 +703,7 @@ export class ChatService {
         );
         return;
       }
-      // Redact before it's streamed to the client and persisted (markError) —
-      // a provider/git error can echo a credential in its own message text,
-      // same hazard WorkerService.recordFailure already guards against.
-      const message = redactSecrets(
-        err instanceof Error ? err.message : 'Unknown error',
-      );
+      const message = this.clientFacingError(err);
       await this.messagesRepository.markError(
         assistantMessage.id,
         buffer,
@@ -877,6 +868,36 @@ export class ChatService {
     if (!conversation)
       throw new NotFoundException(`Conversation ${id} not found`);
     return conversation;
+  }
+
+  /**
+   * DEF-028. What the user is allowed to read when a turn fails.
+   *
+   * A raw provider message used to be streamed straight into the transcript.
+   * What that actually put on screen, verbatim, was a vendor's internal
+   * organisation id, its model id, a JSON blob, and a billing upsell link —
+   * none of which belongs in this product's UI, and none of which a user can
+   * act on. The raw text is logged server-side instead, where it is useful.
+   *
+   * Only RECOGNISED provider conditions are translated. Anything else keeps the
+   * previous behaviour (redacted raw message), because flattening every failure
+   * into "the model is busy" would hide real defects behind a reassuring
+   * sentence — the mistake this is careful not to make.
+   *
+   * `redactSecrets` still runs on that fallback: a provider or git error can
+   * echo a credential in its own message text, the same hazard
+   * WorkerService.recordFailure guards against.
+   */
+  private clientFacingError(err: unknown): string {
+    const raw = err instanceof Error ? err.message : 'Unknown error';
+    const friendly = userFacingProviderMessage(err);
+    if (friendly) {
+      this.logger.warn(
+        `Provider failure surfaced to the user: ${redactSecrets(raw)}`,
+      );
+      return friendly;
+    }
+    return redactSecrets(raw);
   }
 }
 
