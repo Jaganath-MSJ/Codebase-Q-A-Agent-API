@@ -123,13 +123,15 @@ async function probeProjects(fixtureDir) {
   await probe('LP-009', 'POST /projects rejects a bogus zip_upload ref', 400, () =>
     req('POST', '/projects', { body: { name: name(), sourceKind: 'zip_upload', sourceRef: '../../etc/passwd' } }));
 
-  // DEF-019 is still open — these two SHOULD be 400s and are not. Kept as
-  // probes rather than removed, so the day they start returning 400 this script
-  // says so and the defect log gets updated with it.
-  await probe('LP-010', '[DEF-019 open] whitespace-only name is accepted', 201, () =>
+  // DEF-019, fixed 2026-09-19: the name is trimmed before the emptiness check
+  // and bounded at 200 characters.
+  await probe('LP-010', '[DEF-019 fixed] a whitespace-only name is rejected', 400, () =>
     createProbeProject({ name: '   ', sourceKind: 'local_path', sourceRef: fixtureDir }));
-  await probe('LP-011', '[DEF-019 open] a 10,000-character name is accepted', 201, () =>
+  await probe('LP-011', '[DEF-019 fixed] a 10,000-character name is rejected', 400, () =>
     createProbeProject({ name: 'a'.repeat(10_000), sourceKind: 'local_path', sourceRef: fixtureDir }));
+  await probe('LP-015', '[DEF-019 fixed] a padded name is accepted and stored trimmed', (r) =>
+    r.status === 201 && r.body?.name === 'qa-probe padded', () =>
+    createProbeProject({ name: '  qa-probe padded  ', sourceKind: 'local_path', sourceRef: fixtureDir }));
 
   // DEF-018, fixed 2026-09-18: the local_path source ref must be an absolute
   // path to a real directory, checked at create time rather than discovered as
@@ -272,9 +274,9 @@ async function probeChat(projectId) {
 
 async function probeJobsAndMisc(fixtureDir) {
   await probe('LP-400', 'cancelling a malformed job id is 400', 400, () => req('POST', '/jobs/not-a-uuid/cancel', { body: {} }));
-  await probe('LP-401', '[DEF-022] cancelling an unknown job is 409, not 404', 409, () => req('POST', `/jobs/${NIL_UUID}/cancel`, { body: {} }));
+  await probe('LP-401', '[DEF-022 fixed] cancelling an unknown job is 404', 404, () => req('POST', `/jobs/${NIL_UUID}/cancel`, { body: {} }));
   await probe('LP-402', 'indexing an unknown project is 404', 404, () => req('POST', `/projects/${NIL_UUID}/index`, { body: {} }));
-  await probe('LP-403', '[DEF-020] tour generation for an unknown project is accepted', 202, () => req('POST', `/projects/${NIL_UUID}/tour`, { body: {} }));
+  await probe('LP-403', '[DEF-020 fixed] tour generation for an unknown project is 404', 404, () => req('POST', `/projects/${NIL_UUID}/tour`, { body: {} }));
   await probe('LP-404', 'GET /providers never exposes an API key', (r) => r.status === 200 && !/AIza|gsk_|sk-[A-Za-z0-9]{10}/.test(r.text),
     () => req('GET', '/providers'));
 

@@ -60,7 +60,9 @@ export class JobsService {
   }
 
   /** Returns null if the job doesn't exist or is already in a terminal state. */
-  async cancel(jobId: string): Promise<'canceled' | 'canceling' | null> {
+  async cancel(
+    jobId: string,
+  ): Promise<'canceled' | 'canceling' | 'absent' | null> {
     return this.jobsRepository.requestCancel(jobId);
   }
 }

@@ -53,6 +53,10 @@ describe('Tour, changes, search, uploads and providers routes', () => {
           provide: TourService,
           useValue: {
             getTourStatus: () => Promise.resolve(tourStatus),
+            // DEF-020: the POST route now awaits this before scheduling, so a
+            // fabricated project id 404s instead of returning 202. These tests
+            // use VALID_UUID, which exists.
+            assertProjectExists: () => Promise.resolve(undefined),
             generate: () => {
               tourGenerateCalls++;
               return Promise.resolve(undefined);
@@ -344,6 +348,20 @@ describe('Tour, changes, search, uploads and providers routes', () => {
     // is a test suite people learn to distrust.
     const writtenIds: string[] = [];
 
+    /**
+     * A genuine, minimal zip: the end-of-central-directory record alone
+     * (PK\x05\x06 + 18 zero bytes) — a valid EMPTY archive, which is a real
+     * thing and not the same question as "is it a zip?".
+     *
+     * Needed since the DEF-021 fix, which checks the signature after the write.
+     * Note TC-MISC-304 below already sent a genuine PK\x03\x04 header with a
+     * text tail and still passes: only the first four bytes are inspected.
+     */
+    const ZIP_BYTES = Buffer.concat([
+      Buffer.from([0x50, 0x4b, 0x05, 0x06]),
+      Buffer.alloc(18),
+    ]);
+
     const upload = async (filename: string, content: Buffer | string) => {
       const form = new FormData();
       form.append('file', new Blob([content]), filename);
@@ -384,7 +402,7 @@ describe('Tour, changes, search, uploads and providers routes', () => {
     });
 
     it('TC-MISC-303 accepts a .zip regardless of letter case', async () => {
-      const res = await upload('Archive.ZIP', 'PK');
+      const res = await upload('Archive.ZIP', ZIP_BYTES);
       expect(res.status).toBe(201);
     });
 
@@ -396,8 +414,17 @@ describe('Tour, changes, search, uploads and providers routes', () => {
       expect(body.uploadId).toMatch(/\S/);
     });
 
+    it('TC-MISC-306 [DEF-021] rejects .zip-named bytes that are not a zip', async () => {
+      // The fix's point: the extension is a hint, the signature is the check.
+      // Before it this returned 201 and the failure surfaced much later, as a
+      // failed indexing job on a project the user had already created.
+      const res = await upload('repo.zip', 'this is not an archive');
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(res.body)).toMatch(/not a zip/i);
+    });
+
     it('TC-MISC-305 never returns the stored filesystem path (SEC)', async () => {
-      const res = await upload('repo.zip', 'PK');
+      const res = await upload('repo.zip', ZIP_BYTES);
       expect(res.text).not.toMatch(/\/Users\/|[A-Z]:\\|\/tmp\//);
       expect(Object.keys(res.body as object).sort()).toEqual([
         'sizeBytes',

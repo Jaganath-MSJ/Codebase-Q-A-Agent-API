@@ -40,7 +40,14 @@ export class TourController {
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiAcceptedResponse({ type: TourGenerateResponseDto })
-  regenerate(@Param('id', ParseUUIDPipe) id: string): TourGenerateResponseDto {
+  async regenerate(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<TourGenerateResponseDto> {
+    // DEF-020. Checked before scheduling anything: the work below is
+    // fire-and-forget, so without this the route answered 202 for a project
+    // that does not exist — the only project-scoped route that did not 404.
+    await this.tourService.assertProjectExists(id);
+
     // Fire-and-forget: a real tour takes 5-8 sequential model calls, too long
     // to hold an HTTP request open for — the client polls GET back until
     // `generatedAt` moves. Errors are caught and logged inside the service.

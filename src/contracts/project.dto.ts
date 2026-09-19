@@ -1,11 +1,38 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { Transform } from 'class-transformer';
+import {
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import { JobDto } from './job.dto';
 
+/** Display-length ceiling for a project name — see DEF-019. */
+export const PROJECT_NAME_MAX_LENGTH = 200;
+
 export class CreateProjectDto {
-  @ApiProperty({ description: 'Display name for the project' })
+  @ApiProperty({
+    description: 'Display name for the project',
+    maxLength: PROJECT_NAME_MAX_LENGTH,
+  })
   @IsString()
+  // DEF-019, the same root cause as DEF-025 on the chat DTO: `@IsNotEmpty()`
+  // rejects '' but passes '   ', so a project could be created with a
+  // whitespace-only name and then rendered as a nameless row in the sidebar,
+  // the library grid and the command palette — unfindable by name anywhere.
+  // Trimming first closes that and normalises the rest, so "Demo " and "Demo"
+  // are not two differently-named projects.
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsNotEmpty()
+  // The other half: there was no ceiling at all, so a 10,000-character name was
+  // accepted and stored. The limit is a display concern rather than a storage
+  // one (the column is `text`), which is why it is generous — long enough for
+  // any real path-derived name, short enough not to break every layout.
+  @MaxLength(PROJECT_NAME_MAX_LENGTH)
   name!: string;
 
   @ApiPropertyOptional({

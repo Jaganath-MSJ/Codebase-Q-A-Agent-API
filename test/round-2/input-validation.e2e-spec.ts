@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { NotFoundException } from '@nestjs/common';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import {
@@ -8,6 +9,7 @@ import {
   UNKNOWN_UUID,
   type Harness,
 } from '../harness';
+import { PROJECT_NAME_MAX_LENGTH } from '../../src/contracts';
 import { ProjectsService } from '../../src/projects/projects.service';
 import { JobsService } from '../../src/jobs/jobs.service';
 import { TourService } from '../../src/tour/tour.service';
@@ -46,6 +48,7 @@ describe('QA round 2 — input validation and existence checks', () => {
   let h: Harness;
   let lastCreate: Record<string, unknown> | undefined;
   let tourGenerateCalledWith: string[] = [];
+  let cancelResult: 'canceled' | 'canceling' | 'absent' | null = null;
   /**
    * A successful upload streams a real file to `data/uploads/<id>.zip` — the
    * harness fakes the database, not the disk. Tracked and removed in `afterAll`
@@ -69,10 +72,10 @@ describe('QA round 2 — input validation and existence checks', () => {
         {
           provide: JobsService,
           useValue: {
-            // Mirrors the real repository contract: `requestCancel` resolves
-            // null both for "no such job" and "job already terminal". The
-            // controller cannot tell them apart — that is DEF-022.
-            cancel: () => Promise.resolve(null),
+            // Mirrors the real repository contract since the DEF-022 fix:
+            // 'absent' for "no such job", null for "exists but terminal". Each
+            // test sets `cancelResult` to the case it is exercising.
+            cancel: () => Promise.resolve(cancelResult),
             findLatest: () => Promise.resolve(null),
             findLatestForProjects: () => Promise.resolve(new Map()),
           },
@@ -82,6 +85,14 @@ describe('QA round 2 — input validation and existence checks', () => {
           useValue: {
             getTourStatus: () =>
               Promise.resolve({ status: 'absent', tour: null }),
+            // The DEF-020 guard the controller now awaits. Only VALID_UUID
+            // exists in this harness.
+            assertProjectExists: (id: string) =>
+              id === VALID_UUID
+                ? Promise.resolve(undefined)
+                : Promise.reject(
+                    new NotFoundException(`Project ${id} not found`),
+                  ),
             generate: (id: string) => {
               tourGenerateCalledWith.push(id);
               return Promise.resolve(undefined);
@@ -111,26 +122,41 @@ describe('QA round 2 — input validation and existence checks', () => {
       expect(res.status).toBe(400);
     });
 
-    it('TC-R2-101 [DEFECT DEF-019] accepts a whitespace-only name', async () => {
-      // DEF-019 (S4). `@IsNotEmpty()` passes on "   " because it only rejects
-      // the empty string. The project then renders as a nameless row in the
-      // sidebar and the library grid, and is unselectable by name in the
-      // command palette. A `@Transform(trim)` before the check would close it.
-      //
-      // INVERT THIS when DEF-019 is fixed: expect 400.
-      const res = await h.request(
-        '/projects',
-        json({ name: '   ', sourceKind: 'local_path', sourceRef: '/tmp/x' }),
-      );
-      expect(res.status).toBe(201);
-      expect(lastCreate?.name).toBe('   ');
+    it('TC-R2-101 [DEF-019 FIXED] rejects a whitespace-only name', async () => {
+      // DEF-019 (S4), found 2026-09-17, fixed 2026-09-18 — the same root cause
+      // as DEF-025 on the chat DTO. `@IsNotEmpty()` passes on "   " because it
+      // only rejects the empty string, so a project could be created with a
+      // name that renders as a blank row in the sidebar, the library grid and
+      // the command palette, unfindable by name anywhere.
+      for (const name of ['   ', '\t', '\n', ' \t ']) {
+        const res = await h.request(
+          '/projects',
+          json({ name, sourceKind: 'local_path', sourceRef: '/tmp/x' }),
+        );
+        expect(res.status, `expected 400 for ${JSON.stringify(name)}`).toBe(
+          400,
+        );
+      }
     });
 
-    it('TC-R2-102 [DEFECT DEF-019] accepts an unbounded 10,000-character name', async () => {
-      // Same defect, second half: there is no `@MaxLength` on the field, so the
-      // only ceiling is Postgres' `text` column (i.e. none that matters).
-      //
-      // INVERT THIS when DEF-019 is fixed: expect 400.
+    it('TC-R2-103 [DEF-019] trims a name that has real content', async () => {
+      // The other half of the same transform: "Demo " and "Demo" must not be
+      // two differently-named projects.
+      const res = await h.request(
+        '/projects',
+        json({
+          name: '  Demo  ',
+          sourceKind: 'local_path',
+          sourceRef: '/tmp/x',
+        }),
+      );
+      expect(res.status).toBe(201);
+      expect(lastCreate?.name).toBe('Demo');
+    });
+
+    it('TC-R2-102 [DEF-019 FIXED] rejects an unbounded name', async () => {
+      // Second half: there was no `@MaxLength`, so the only ceiling was
+      // Postgres' `text` column — i.e. none that matters for a UI.
       const res = await h.request(
         '/projects',
         json({
@@ -139,8 +165,21 @@ describe('QA round 2 — input validation and existence checks', () => {
           sourceRef: '/tmp/x',
         }),
       );
+      expect(res.status).toBe(400);
+    });
+
+    it('TC-R2-104 [DEF-019] accepts a name exactly at the limit', async () => {
+      // Pins the boundary rather than just "long is rejected", so the limit
+      // cannot drift silently.
+      const res = await h.request(
+        '/projects',
+        json({
+          name: 'a'.repeat(PROJECT_NAME_MAX_LENGTH),
+          sourceKind: 'local_path',
+          sourceRef: '/tmp/x',
+        }),
+      );
       expect(res.status).toBe(201);
-      expect(String(lastCreate?.name)).toHaveLength(10_000);
     });
   });
 
@@ -215,14 +254,22 @@ describe('QA round 2 — input validation and existence checks', () => {
   });
 
   describe('TC-R2-12x — resource existence', () => {
-    it('TC-R2-120 [DEFECT DEF-022] returns 409, not 404, for a job that does not exist', async () => {
-      // DEF-022 (S4). `JobsService.cancel` resolves null for both "unknown id"
-      // and "already terminal", and the controller maps null to
-      // `ConflictException("Job … is not active")`. A client cannot distinguish
-      // a typo'd id from a race it lost.
-      //
-      // INVERT THIS when DEF-022 is fixed: expect 404 for an unknown id and
-      // keep 409 for a known-but-terminal one.
+    it('TC-R2-120 [DEF-022 FIXED] returns 404 for a job that does not exist', async () => {
+      // DEF-022 (S4), found 2026-09-17, fixed 2026-09-18. `requestCancel`
+      // resolved null for both "unknown id" and "already terminal", and the
+      // controller mapped null to 409 "is not active" — so a client could not
+      // tell a typo'd id from a race it lost. It now resolves 'absent' for the
+      // first case.
+      cancelResult = 'absent';
+      const res = await h.request(`/jobs/${UNKNOWN_UUID}/cancel`, {
+        method: 'POST',
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it('TC-R2-123 [DEF-022] still returns 409 for a job that exists but is finished', async () => {
+      // The distinction only means something if the other side still holds.
+      cancelResult = null;
       const res = await h.request(`/jobs/${UNKNOWN_UUID}/cancel`, {
         method: 'POST',
       });
@@ -237,37 +284,38 @@ describe('QA round 2 — input validation and existence checks', () => {
       expect(res.status).toBe(400);
     });
 
-    it('TC-R2-122 [DEFECT DEF-020] accepts tour generation for a project that does not exist', async () => {
-      // DEF-020 (S4). Unlike every other project-scoped route, `POST
-      // /projects/:id/tour` never checks that the project exists — it returns
-      // 202 and schedules real work keyed to a fabricated id.
+    it('TC-R2-122 [DEF-020 FIXED] rejects tour generation for a project that does not exist', async () => {
+      // DEF-020 (S4), found 2026-09-17, fixed 2026-09-18. Unlike every other
+      // project-scoped route, `POST /projects/:id/tour` never checked that the
+      // project existed — it returned 202 and scheduled real work keyed to a
+      // fabricated id.
       //
-      // Note the sibling GET is NOT a defect: returning 200 `{status:'absent'}`
-      // in every state is the deliberate Phase 13.5 contract that stopped the
-      // client polling a 404 forever. Only the POST is missing its guard.
-      //
-      // INVERT THIS when DEF-020 is fixed: expect 404.
+      // The sibling GET is NOT a defect and is unchanged: returning 200
+      // `{status:'absent'}` in every state is the deliberate Phase 13.5
+      // contract that stopped the client polling a 404 forever. Only the POST
+      // was missing its guard.
       tourGenerateCalledWith = [];
       const res = await h.request(`/projects/${UNKNOWN_UUID}/tour`, {
         method: 'POST',
       });
-      expect(res.status).toBe(202);
-      expect(tourGenerateCalledWith).toContain(UNKNOWN_UUID);
+      expect(res.status).toBe(404);
+      // And nothing was scheduled, which is the point — a 404 that still
+      // queued the work would be no better than the 202.
+      expect(tourGenerateCalledWith).toEqual([]);
     });
   });
 
   describe('TC-R2-13x — uploads', () => {
-    it('TC-R2-130 [DEFECT DEF-021] accepts any bytes so long as the filename ends in .zip', async () => {
-      // DEF-021 (S4). The fileFilter in 'src/uploads/uploads.controller.ts' tests
-      // `originalname.endsWith('.zip')` and nothing else — no magic-number
-      // check (`PK\x03\x04`), no size floor. Arbitrary content is written to
-      // `data/uploads/<uploadId>.zip` and only rejected later, at materialize
-      // time, as a failed indexing job.
+    it('TC-R2-130 [DEF-021 FIXED] rejects bytes that are not a zip, whatever the filename', async () => {
+      // DEF-021 (S4), found 2026-09-17, fixed 2026-09-18. The fileFilter in
+      // 'src/uploads/uploads.controller.ts' can only see the *name* — multer
+      // runs it before any bytes are written — so anything was accepted as long
+      // as it ended in `.zip`, and the failure surfaced much later as a failed
+      // indexing job on a project the user had already created. The signature
+      // is now checked after the write.
       //
-      // The zip-slip defences are NOT what is at issue here and remain intact
-      // (see `zip-extractor.spec.ts`); this is about where the failure surfaces.
-      //
-      // INVERT THIS when DEF-021 is fixed: expect 400.
+      // The zip-slip defences are NOT what was at issue and remain intact (see
+      // `zip-extractor.spec.ts`); this is about where the failure surfaces.
       const form = new FormData();
       form.append(
         'file',
@@ -277,8 +325,27 @@ describe('QA round 2 — input validation and existence checks', () => {
         'payload.zip',
       );
       const res = await h.request('/uploads', { method: 'POST', body: form });
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(res.body)).toMatch(/not a zip/i);
+    });
+
+    it('TC-R2-133 [DEF-021] accepts real zip bytes', async () => {
+      // A minimal but genuine empty archive: the end-of-central-directory
+      // record alone, PK\x05\x06 + 18 zero bytes. Asserted because "reject
+      // non-zips" is only half the fix — rejecting real ones too would be worse
+      // than the defect.
+      const eocd = Buffer.concat([
+        Buffer.from([0x50, 0x4b, 0x05, 0x06]),
+        Buffer.alloc(18),
+      ]);
+      const form = new FormData();
+      form.append(
+        'file',
+        new Blob([eocd], { type: 'application/zip' }),
+        'real.zip',
+      );
+      const res = await h.request('/uploads', { method: 'POST', body: form });
       expect(res.status).toBe(201);
-      expect(res.body).toHaveProperty('uploadId');
       uploadedIds.push((res.body as { uploadId: string }).uploadId);
     });
 

@@ -63,6 +63,11 @@ export class JobsController {
     @Param('jobId', ParseUUIDPipe) jobId: string,
   ): Promise<{ status: 'canceled' | 'canceling' }> {
     const result = await this.jobsService.cancel(jobId);
+    // DEF-022. 404 for "no such job", 409 for "exists but already finished".
+    // Both used to be 409 "is not active", which left a client unable to tell a
+    // typo'd id from a race it lost.
+    if (result === 'absent')
+      throw new NotFoundException(`Job ${jobId} not found`);
     if (!result) throw new ConflictException(`Job ${jobId} is not active`);
     return { status: result };
   }

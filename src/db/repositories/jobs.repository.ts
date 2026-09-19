@@ -193,7 +193,15 @@ export class JobsRepository {
    * it yet); a running job is flagged and left for its own worker to notice
    * and exit cleanly. Returns null if there was nothing active to cancel.
    */
-  async requestCancel(id: string): Promise<'canceled' | 'canceling' | null> {
+  /**
+   * DEF-022. Resolves `'absent'` when there is no such job, distinct from
+   * `null` for a job that exists but is already terminal — the controller maps
+   * those to 404 and 409 respectively. They used to be the same `null`, so a
+   * typo'd id and a race you lost were indistinguishable to a client.
+   */
+  async requestCancel(
+    id: string,
+  ): Promise<'canceled' | 'canceling' | 'absent' | null> {
     const [queuedRow] = await this.db
       .update(indexingJobs)
       .set({ status: 'canceled', finishedAt: new Date() })
@@ -214,7 +222,17 @@ export class JobsRepository {
       .set({ cancelRequested: true })
       .where(and(eq(indexingJobs.id, id), eq(indexingJobs.status, 'running')))
       .returning({ id: indexingJobs.id });
-    return runningRow ? 'canceling' : null;
+    if (runningRow) return 'canceling';
+
+    // Neither update matched: either the job is terminal, or there is no such
+    // job. Only now is the extra read worth paying for — the happy paths above
+    // never reach it.
+    const [existing] = await this.db
+      .select({ id: indexingJobs.id })
+      .from(indexingJobs)
+      .where(eq(indexingJobs.id, id))
+      .limit(1);
+    return existing ? null : 'absent';
   }
 
   /** The daily embedding-request budget is shared across every job, so it's a sum since midnight, not per-job. */

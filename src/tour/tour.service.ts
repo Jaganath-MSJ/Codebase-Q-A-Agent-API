@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ProjectsRepository } from '../db/repositories/projects.repository';
 import { ChunksRepository } from '../db/repositories/chunks.repository';
 import type { TourRecord } from '../db/schema';
@@ -87,6 +87,21 @@ export class TourService {
         // (new revision) is attempted afresh.
         this.attemptedRevision.set(projectId, revision);
       });
+  }
+
+  /**
+   * DEF-020. Throws if the project does not exist.
+   *
+   * `generate` is fire-and-forget — it returns silently for an unknown id,
+   * which is right for a background trigger but meant the POST route answered
+   * 202 for a fabricated id and scheduled real work against it. The controller
+   * awaits this first so the route can 404 like every other project-scoped one.
+   */
+  async assertProjectExists(projectId: string): Promise<void> {
+    const project = await this.projectsRepository.findById(projectId);
+    if (!project) {
+      throw new NotFoundException(`Project ${projectId} not found`);
+    }
   }
 
   async generate(projectId: string, force = false): Promise<void> {
