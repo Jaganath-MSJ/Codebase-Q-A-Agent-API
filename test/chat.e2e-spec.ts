@@ -8,6 +8,7 @@ import {
   type Harness,
 } from './harness';
 import { ChatService } from '../src/chat/chat.service';
+import { QUESTION_MAX_LENGTH } from '../src/contracts/conversation.dto';
 
 /**
  * QA pass — TC-CHAT-*.
@@ -428,9 +429,40 @@ describe('Chat routes and SSE', () => {
       expect(res.status).toBe(400);
     });
 
-    it('TC-CHAT-207 accepts a very long question without a 500', async () => {
+    it('TC-CHAT-207 a very long question is refused, not a 500', async () => {
+      // Was "accepts a very long question without a 500" — 10,000 characters
+      // was accepted, because `question` had no ceiling at all (DEF-033).
+      // It is now a 400, which still satisfies the original intent (never a
+      // 500) while saying something much more specific.
       const res = await post({ question: 'x'.repeat(10_000) });
-      expect(res.status).toBeLessThan(500);
+      expect(res.status).toBe(400);
+    });
+
+    it('TC-CHAT-208 [DEF-033 FIXED] bounds the question length', async () => {
+      // DEF-033, found in QA round 3. DEF-019 and DEF-025 were one root cause
+      // on two DTOs — `@IsNotEmpty()` passes whitespace — and both got the
+      // trim. Only the project name also got the ceiling; `question` kept the
+      // trim alone and stayed unbounded, so the only limit was Express's
+      // default 100 KB body. A ~100 KB question ran the full pipeline —
+      // condense, retrieve, generate — against a 900/day free tier.
+      const res = await post({ question: 'x'.repeat(QUESTION_MAX_LENGTH + 1) });
+      expect(res.status).toBe(400);
+    });
+
+    it('TC-CHAT-209 [DEF-033] accepts a question exactly at the limit', async () => {
+      // Pins the boundary, not just "long is rejected", so the limit cannot
+      // drift silently — the same shape as TC-R2-104 for the project name.
+      const res = await post({ question: 'x'.repeat(QUESTION_MAX_LENGTH) });
+      expect(res.status).toBeLessThan(400);
+    });
+
+    it('TC-CHAT-210 [DEF-033] an over-long question never reaches the chat service', async () => {
+      // The reason for the bound is cost: the rejection has to happen at the
+      // DTO, before anything that could spend a provider call. Same assertion
+      // shape as TC-CHAT-207 for the whitespace case.
+      streamCalls = [];
+      await post({ question: 'x'.repeat(QUESTION_MAX_LENGTH + 1) });
+      expect(streamCalls).toEqual([]);
     });
   });
 

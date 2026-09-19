@@ -171,9 +171,39 @@ export class ProjectsService {
     //
     // `workspacePath` is where the adapter actually put the files on disk —
     // for git_url that's `data/workspaces/<id>`, not the clone URL in
-    // `sourceRef`. It's only null for a project that has never been indexed,
-    // which has no citations to view yet.
-    const root = project.workspacePath ?? project.sourceRef;
+    // `sourceRef`.
+    //
+    // DEF-032. This used to be a bare `?? project.sourceRef`, on the assumption
+    // that a null `workspacePath` "only happens for a project that has never
+    // been indexed, which has no citations to view yet". A live `git_url`
+    // project falsified both halves at once: four rendered citations, and a
+    // null `workspacePath`.
+    //
+    // The fallback is only meaningful for `local_path`, whose `sourceRef` is a
+    // native absolute directory (the INV-2 exception). For every other kind it
+    // is a GitHub URL or an upload id — not a path at all — and feeding one to
+    // `path.resolve` does not fail, it fabricates:
+    //
+    //   path.resolve('https://github.com/u/r')
+    //     -> '<cwd>/https:/github.com/u/r'
+    //
+    // which then passes the containment check (it is an ordinary string under
+    // cwd) and ENOENTs one line later. So the user got "File is no longer
+    // readable (ENOENT) — re-index the project" for a project where nothing had
+    // ever been materialised: the wrong cause, and a remedy that does not
+    // obviously apply, on a project that otherwise reports `ready` and whose
+    // search works.
+    const root =
+      project.workspacePath ??
+      (project.sourceKind === 'local_path' ? project.sourceRef : null);
+    if (!root) {
+      // Deliberately says nothing about `sourceRef` — INV-2, and the DEF-004
+      // lesson: a clone URL can carry a token, and an upload id is noise.
+      throw new NotFoundException(
+        `This project has not been indexed yet, so its files cannot be viewed. ` +
+          `Index it and try again.`,
+      );
+    }
     let absPath: string;
     try {
       absPath = resolveInside(root, relPath);

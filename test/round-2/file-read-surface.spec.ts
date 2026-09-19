@@ -249,3 +249,107 @@ describe('TC-R2-0xx — GET /projects/:id/file read surface', () => {
     expect(dto?.contextEnd).toBe(3);
   });
 });
+
+/**
+ * QA round 3 — TC-R3-0xx, the pin for DEF-032.
+ *
+ * `getFile` resolves against `project.workspacePath ?? project.sourceRef`, and
+ * the comment beside that fallback assumed `workspacePath` is "only null for a
+ * project that has never been indexed, which has no citations to view yet".
+ *
+ * A live `git_url` project falsified both halves: it had 4 rendered citations
+ * and a null `workspacePath`. `sourceRef` for that kind is a **GitHub URL**,
+ * not a directory, so the fallback fabricated a root —
+ * `path.resolve('https://github.com/u/r')` is `<cwd>/https:/github.com/u/r` —
+ * which passes containment (it is a normal string under cwd) and then ENOENTs.
+ *
+ * The user-visible result: every citation 404s with "re-index the project",
+ * on a project that reports `ready` and whose search works.
+ */
+describe('TC-R3-0xx — the workspace-root fallback (DEF-032)', () => {
+  const unindexedProject = (overrides: Record<string, unknown>) => {
+    const filesRepository = {
+      // The path IS indexed — this defect lives past the membership gate.
+      existsByPath: () => Promise.resolve(true),
+    };
+    const projectsRepository = {
+      findById: (id: string) =>
+        Promise.resolve(
+          id === PROJECT_ID
+            ? {
+                id,
+                name: 'QA',
+                status: 'ready',
+                headRevision: 'rev-1',
+                ...overrides,
+              }
+            : null,
+        ),
+    };
+    return new ProjectsService(
+      projectsRepository as never,
+      {} as never,
+      {} as never,
+      { dataDir: root } as never,
+      filesRepository as never,
+    );
+  };
+
+  it('TC-R3-001 [DEF-032 FIXED] a git_url project with no workspace says so, instead of ENOENT', async () => {
+    // Before the fix this was a 404 "File is no longer readable (ENOENT) —
+    // re-index the project", which names the wrong cause: nothing was ever
+    // materialised, so there is no stale index to refresh and no file that
+    // stopped being readable.
+    const service = unindexedProject({
+      sourceKind: 'git_url',
+      sourceRef: 'https://github.com/someuser/somerepo',
+      workspacePath: null,
+    });
+    await expect(
+      service.getFile(PROJECT_ID, 'README.md', 1, 55, 0),
+    ).rejects.toMatchObject({ status: 404 });
+
+    const err = await service
+      .getFile(PROJECT_ID, 'README.md', 1, 55, 0)
+      .catch((e: Error) => e);
+    expect((err as Error).message).toMatch(/not been indexed/i);
+    // INV-2: the fabricated host path must not leak either.
+    expect((err as Error).message).not.toMatch(/github\.com/);
+    expect((err as Error).message).not.toMatch(process.cwd());
+  });
+
+  it('TC-R3-002 [DEF-032] the same holds for zip_upload, whose sourceRef is an upload id', async () => {
+    const service = unindexedProject({
+      sourceKind: 'zip_upload',
+      sourceRef: 'upload-abc123',
+      workspacePath: null,
+    });
+    const err = await service
+      .getFile(PROJECT_ID, 'README.md', 1, 5, 0)
+      .catch((e: Error) => e);
+    expect((err as Error).message).toMatch(/not been indexed/i);
+  });
+
+  it('TC-R3-003 [DEF-032] local_path still falls back to sourceRef, which IS a directory', async () => {
+    // The fallback is correct for exactly one source kind, and that must keep
+    // working — a local_path project's sourceRef is the native absolute path
+    // the repo-relative paths resolve against (CLAUDE.md, INV-2's exception).
+    const service = unindexedProject({
+      sourceKind: 'local_path',
+      sourceRef: root,
+      workspacePath: null,
+    });
+    const { dto } = await service.getFile(PROJECT_ID, 'src/a.ts', 1, 2, 0);
+    expect(dto?.lines).toEqual(['export const a = 1;', 'export const b = 2;']);
+  });
+
+  it('TC-R3-004 [DEF-032] a materialised workspace is unaffected', async () => {
+    const service = unindexedProject({
+      sourceKind: 'git_url',
+      sourceRef: 'https://github.com/someuser/somerepo',
+      workspacePath: root,
+    });
+    const { dto } = await service.getFile(PROJECT_ID, 'src/a.ts', 1, 2, 0);
+    expect(dto?.lines).toEqual(['export const a = 1;', 'export const b = 2;']);
+  });
+});

@@ -127,3 +127,87 @@ describe('estimateRequestTokens / fitsWithinBudget — DEF-029', () => {
     expect(fitsWithinBudget(req(36_000), 8_000)).toBe(false); // 9,000, beyond it
   });
 });
+
+/**
+ * DEF-034 — the estimate counted only `system`, `user` and the tool
+ * definitions, so `fitsWithinBudget` under-counted and could answer "fits" for
+ * a request that does not.
+ *
+ * Two omissions, with very different reach, both fixed here:
+ *
+ *  - `maxTokens`, the output allowance. **Live today.** A tokens-per-minute
+ *    ceiling is charged for input *and* output, but only input was measured.
+ *  - `priorTurns`, the accumulated agent-loop history. **Latent**: the only
+ *    caller that populates it always sends tools, which `canFailOver` already
+ *    refuses for the `supportsTools: false` secondary. It becomes reachable
+ *    the moment a tools-capable secondary is configured, and it is the largest
+ *    and fastest-growing part of a multi-step request when it does.
+ */
+describe('estimateRequestTokens — DEF-034', () => {
+  const base: ChatRequest = {
+    system: 'x'.repeat(2_000),
+    user: 'y'.repeat(2_000),
+  };
+
+  it('counts the output allowance, because a TPM ceiling charges for it', () => {
+    expect(estimateRequestTokens({ ...base, maxTokens: 2_048 })).toBe(
+      estimateRequestTokens(base) + 2_048,
+    );
+  });
+
+  it('counts priorTurns — assistant text, tool results and call arguments', () => {
+    const withHistory: ChatRequest = {
+      ...base,
+      priorTurns: [
+        {
+          role: 'assistant',
+          content: 'a'.repeat(4_000),
+          toolCalls: [
+            { id: 't1', name: 'search_code', args: { query: 'q'.repeat(400) } },
+          ],
+        },
+        {
+          role: 'tool',
+          results: [
+            {
+              toolCallId: 't1',
+              name: 'search_code',
+              content: 'r'.repeat(8_000),
+            },
+          ],
+        },
+      ],
+    };
+    // 12,000+ characters of history is at least 3,000 tokens; the old estimate
+    // scored this identically to `base`.
+    expect(estimateRequestTokens(withHistory)).toBeGreaterThanOrEqual(
+      estimateRequestTokens(base) + 3_000,
+    );
+  });
+
+  it('is unchanged for a plain single-turn request', () => {
+    // The RAG path sets neither field, so the DEF-029 numbers above must not
+    // move — this is what keeps that fix's calibration honest.
+    expect(estimateRequestTokens(base)).toBe(1_000);
+  });
+
+  it('closes the live gap: output pushes a borderline request over the ceiling', () => {
+    // The band where this actually bites is narrow, so the numbers matter.
+    // Against an 8,000 budget the gate allows 8,800 after headroom, and
+    // generation asks for 2,048 output — so a request flips verdict only when
+    // its input is above 8,800 − 2,048 = 6,752 tokens and still under 8,800.
+    //
+    // 28,000 chars ≈ 7,000 input tokens sits squarely in that band: it passed
+    // on input alone, and 7,000 + 2,048 = 9,048 is over the ceiling it was
+    // about to be charged against.
+    const borderline: ChatRequest = {
+      system: 'x'.repeat(14_000),
+      user: 'y'.repeat(14_000),
+      maxTokens: 2_048,
+    };
+    expect(estimateRequestTokens({ ...borderline, maxTokens: undefined })).toBe(
+      7_000,
+    );
+    expect(fitsWithinBudget(borderline, 8_000)).toBe(false);
+  });
+});

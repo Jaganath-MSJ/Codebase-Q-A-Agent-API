@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  MaxLength,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 
@@ -112,8 +113,25 @@ export class MessageDto {
   createdAt!: string;
 }
 
+/**
+ * Length ceiling for a single question — see DEF-033.
+ *
+ * ~1,000 tokens at the usual four-characters-per-token approximation. Chosen to
+ * be generous for what a person actually types — a paragraph, a pasted stack
+ * trace, a short function — while staying a small fraction of the ~11k-token
+ * RAG prompt the question is embedded in, so the question can never be the
+ * thing that pushes a turn over a provider's per-request ceiling.
+ *
+ * Deliberately far below Express's default 100 KB body limit, which was the
+ * only ceiling before this and is a transport bound, not a product one.
+ */
+export const QUESTION_MAX_LENGTH = 4_000;
+
 export class PostMessageDto {
-  @ApiProperty({ description: 'Question in plain English' })
+  @ApiProperty({
+    description: 'Question in plain English',
+    maxLength: QUESTION_MAX_LENGTH,
+  })
   @IsString()
   // DEF-025. `@IsNotEmpty()` alone rejects '' but passes '   ', so a
   // whitespace-only question ran the whole pipeline — condense, retrieve,
@@ -129,6 +147,13 @@ export class PostMessageDto {
     typeof value === 'string' ? value.trim() : value,
   )
   @IsNotEmpty()
+  // DEF-033. The other half of DEF-019's root cause, which was fixed on the
+  // project name and missed here: the trim landed on both DTOs, the ceiling on
+  // only one. Without it the sole limit was the 100 KB body, so a ~100 KB
+  // question ran the whole pipeline — condense, retrieve, generate — against a
+  // 900/day free tier. Bounded after the trim, so trailing whitespace cannot
+  // consume the allowance.
+  @MaxLength(QUESTION_MAX_LENGTH)
   question!: string;
 
   @ApiPropertyOptional({

@@ -116,8 +116,34 @@ export function estimateRequestTokens(req: ChatRequest): number {
   const toolText = (req.tools ?? [])
     .map((t) => `${t.name}${t.description}${JSON.stringify(t.parameters)}`)
     .join('');
-  const chars = req.system.length + req.user.length + toolText.length;
-  return Math.ceil(chars / 4);
+
+  // DEF-034. The accumulated agent-loop history. Omitting it made every step of
+  // a multi-step request score the same as its first, even though this is the
+  // part that actually grows — and grows fastest.
+  //
+  // Latent rather than live today: only `agent.loop.ts` populates `priorTurns`,
+  // and it always sends `tools`, which `canFailOver` already refuses for a
+  // `supportsTools: false` secondary. Counted anyway, because the day a
+  // tools-capable secondary is configured, this becomes the dominant term and
+  // nothing would flag it.
+  const historyText = (req.priorTurns ?? [])
+    .map((turn) =>
+      turn.role === 'assistant'
+        ? turn.content +
+          turn.toolCalls
+            .map((c) => `${c.name}${JSON.stringify(c.args)}`)
+            .join('')
+        : turn.results.map((r) => `${r.name}${r.content}`).join(''),
+    )
+    .join('');
+
+  const chars =
+    req.system.length + req.user.length + toolText.length + historyText.length;
+
+  // DEF-034. A tokens-per-minute ceiling is charged for input *and* output, so
+  // the allowance we are about to ask for is part of what has to fit. Added as
+  // tokens, not characters: `maxTokens` is already a token count.
+  return Math.ceil(chars / 4) + (req.maxTokens ?? 0);
 }
 
 /**

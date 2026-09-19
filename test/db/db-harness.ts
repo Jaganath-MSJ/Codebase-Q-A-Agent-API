@@ -67,6 +67,74 @@ async function discoverTables(db: Db): Promise<string[]> {
 export class UnsafeTestDatabaseError extends Error {}
 
 /**
+ * DEF-031. The test database answered, and then refused us.
+ *
+ * Deliberately a sibling of `UnsafeTestDatabaseError` rather than a skip: both
+ * mean "this environment is configured wrong, and running anyway would tell you
+ * something false". Unsafe would destroy data; this one silently destroys
+ * *coverage*, which is quieter and therefore worse.
+ */
+export class MisconfiguredTestDatabaseError extends Error {}
+
+/**
+ * Why did the connection fail — is the database absent, or present and
+ * rejecting us?
+ *
+ * DEF-031. These were the same answer, and they must not be. `pg` reports both
+ * through the same rejected promise, so the only thing separating "no Postgres
+ * on this machine" (a legitimate skip, TC-ENV-004) from "Postgres is right
+ * there and my credentials are wrong" (a misconfiguration that must be loud) is
+ * the error it carries.
+ *
+ * Pure, and tested without a database — see `connection-failure.spec.ts`.
+ *
+ * The default is `unreachable`, i.e. skip. That asymmetry is on purpose: the
+ * failures that mean "misconfigured" are a small, well-known set worth
+ * enumerating, whereas defaulting an unrecognised error to "fail" would risk
+ * breaking the machine-with-no-database guarantee for some network condition
+ * nobody anticipated.
+ */
+export function classifyConnectionFailure(
+  err: unknown,
+): 'unreachable' | 'rejected' {
+  // Authorisation and "wrong target" SQLSTATEs: the server processed the
+  // connection far enough to turn us down on its own terms.
+  const REJECTING_SQLSTATES = new Set([
+    '28P01', // invalid_password
+    '28000', // invalid_authorization_specification (incl. no pg_hba entry)
+    '3D000', // invalid_catalog_name — the database does not exist
+    '42501', // insufficient_privilege
+  ]);
+
+  const code = pgErrorCode(err);
+  if (code && REJECTING_SQLSTATES.has(code)) return 'rejected';
+
+  // SASL failures are raised client-side by `pg` before any SQLSTATE exists,
+  // so text is all there is. This is the shape DEF-031 was actually found on:
+  // "SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string".
+  for (
+    let cursor: unknown = err, depth = 0;
+    cursor !== null && cursor !== undefined && depth < 8;
+    cursor = (cursor as { cause?: unknown }).cause, depth++
+  ) {
+    const message =
+      cursor instanceof Error
+        ? cursor.message
+        : typeof cursor === 'string'
+          ? cursor
+          : '';
+    if (
+      /^SASL:/.test(message) ||
+      /client password must be a string/.test(message)
+    ) {
+      return 'rejected';
+    }
+  }
+
+  return 'unreachable';
+}
+
+/**
  * Digs the Postgres SQLSTATE out of a rejected drizzle query.
  *
  * drizzle wraps driver errors in its own `Failed query: ...` Error, so the
@@ -201,7 +269,31 @@ export async function testDatabaseAvailable(): Promise<boolean> {
     await pool.query('select 1');
     cachedReachable = true;
   } catch (err) {
-    cachedReason = err instanceof Error ? err.message : String(err);
+    const message = err instanceof Error ? err.message : String(err);
+
+    // DEF-031. A database that answers and then refuses us is a
+    // misconfiguration, not an absent database — abort rather than skip.
+    //
+    // Skipping here is what let 55 assertions stop running between two green
+    // runs, INV-1's 768-dimension pin among them, with nothing in the output
+    // to say so. Same reasoning as the `assertSafeTestDatabase` call above:
+    // "not configured" is safe to pass over quietly, "configured wrong" is not.
+    if (classifyConnectionFailure(err) === 'rejected') {
+      throw new MisconfiguredTestDatabaseError(
+        `DATABASE_URL_TEST points at a reachable database that rejected the ` +
+          `connection: ${message}\n` +
+          `\n` +
+          `This is a misconfiguration, not an absent database, so the L3 layer ` +
+          `is failing instead of skipping — skipping would drop every ` +
+          `database-backed assertion (INV-1 included) while the suite still ` +
+          `reported green.\n` +
+          `\n` +
+          `Fix the credentials in DATABASE_URL_TEST, or unset it entirely if ` +
+          `you intend to run without a database.`,
+      );
+    }
+
+    cachedReason = message;
     cachedReachable = false;
   } finally {
     await pool.end().catch(() => undefined);
