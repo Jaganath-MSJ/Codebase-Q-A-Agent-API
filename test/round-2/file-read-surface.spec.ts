@@ -9,7 +9,7 @@ import * as readFileModule from '../../src/common/read-file';
  * QA round 2 — TC-R2-0xx. The file-read surface of `GET /projects/:id/file`.
  *
  * **Why these run against the real `ProjectsService` and a real temp directory.**
- * Phase 15's L2 suite stubs `ProjectsService` wholesale (see
+ * The L2 suite stubs `ProjectsService` wholesale (see
  * `test/projects.e2e-spec.ts`, which replaces `getFile` with a canned DTO), so
  * every defect living *inside* `getFile` was structurally invisible to it. That
  * is exactly how DEF-015 survived a 1,140-case pass. These tests therefore keep
@@ -17,7 +17,7 @@ import * as readFileModule from '../../src/common/read-file';
  *
  * **These tests pin DEFECTS, not desired behaviour.** Each one asserts what the
  * code does today so the reproduction cannot rot; invert the assertion in the
- * slice that fixes it, exactly as Phase 16 did for its own log. Do not "fix"
+ * slice that fixes it, as every fixed defect in the log has done. Do not "fix"
  * a failing test here by loosening it — a failure means behaviour moved, which
  * is the signal this file exists to give.
  */

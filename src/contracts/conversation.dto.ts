@@ -159,7 +159,7 @@ export class PostMessageDto {
   @ApiPropertyOptional({
     enum: ['auto', 'fast', 'thorough'],
     description:
-      '"fast" (RAG) or "thorough" (the Phase 7 agent loop) forces that mode; "auto" or omitted lets the heuristic router decide from the question text.',
+      '"fast" (RAG) or "thorough" (the agent loop) forces that mode; "auto" or omitted lets the heuristic router decide from the question text.',
   })
   @IsOptional()
   @IsIn(['auto', 'fast', 'thorough'])

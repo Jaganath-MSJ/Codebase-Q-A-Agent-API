@@ -43,7 +43,7 @@ describe('CachingChatProvider cache key (complete)', () => {
     expect(complete).toHaveBeenCalledOnce();
   });
 
-  it('does NOT collide when only maxTokens differs (Phase 12.4)', async () => {
+  it('does NOT collide when only maxTokens differs', async () => {
     const complete = vi.fn().mockResolvedValue({ text: 'X', usage: {} });
     const p = new CachingChatProvider(inner(complete), tmp());
     await p.complete({ ...BASE, maxTokens: 100 });

@@ -188,7 +188,6 @@ export async function createHarness(
       transform: true,
     }),
   );
-  // -----------------------------
 
   await app.init();
   await app.listen(0);

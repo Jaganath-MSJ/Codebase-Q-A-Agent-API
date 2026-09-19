@@ -82,7 +82,7 @@ describe('GroqChatProvider — identity', () => {
 
   it('TC-LLM-002 declares that it does not support tools', () => {
     // Load-bearing for failover: a tool-using request must never be handed to
-    // this provider (Phase 12.2).
+    // this provider.
     expect(providerWith({}).supportsTools).toBe(false);
   });
 });

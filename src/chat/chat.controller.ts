@@ -167,7 +167,7 @@ export class ChatController {
    * that decides which one a given request actually gets, whether from an
    * explicit `mode` or the heuristic router on "auto". A multi-project
    * conversation is always forced to Fast here, regardless of what was
-   * requested — Phase 7's tool executors are single-projectId-scoped
+   * requested — the tool executors are single-projectId-scoped
    * throughout, so Thorough mode has no meaningful multi-project behavior
    * to fall back to yet.
    */

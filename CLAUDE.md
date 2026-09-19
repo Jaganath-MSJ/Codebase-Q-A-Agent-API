@@ -28,13 +28,17 @@ expect(lines.slice(chunk.startLine - 1, chunk.endLine).join('\n')).toBe(chunk.co
 ```bash
 npm run start:dev      # API on :3000, docs at /api/docs (watch mode)
 npm run test           # vitest
-npm run db:generate    # drizzle-kit generate — then hand-edit for extensions/indexes
-npm run db:migrate
-npm run eval            # retrieval recall harness (Phase 5)
-npm run eval:answers    # answer-quality LLM judge (Phase 8) — manual, not a CI gate
+npx drizzle-kit generate   # new migration from src/db/schema.ts — then hand-edit it for
+                           # extensions and indexes drizzle-kit does not emit
+npm run eval            # retrieval recall harness
+npm run eval:answers    # answer-quality LLM judge — manual, not a CI gate
 npm run bench            # retrieval latency/quality benchmark
 npm run bench:index      # indexing throughput benchmark
 ```
+
+**Applying a migration is not a command.** `DbModule.onModuleInit` calls `runMigrations` against
+`drizzle/` on every boot, so starting the API applies anything new. Generate the file, hand-edit
+it, restart.
 
 ## Environment
 

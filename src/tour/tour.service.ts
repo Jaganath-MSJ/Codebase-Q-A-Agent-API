@@ -16,7 +16,7 @@ import type { TourStatus } from '../contracts';
 
 const TOP_N_FILES = 30;
 const MAP_BATCH_SIZE = 5;
-// Phase 12.4: medium output cap for the tour's map + reduce steps (tunable).
+// Medium output cap for the tour's map + reduce steps (tunable).
 const TOUR_MAX_TOKENS = 1024;
 
 @Injectable()
@@ -28,7 +28,7 @@ export class TourService {
   // The revision each project was last generated FOR (once it completed). Lets a
   // GET that still finds no fresh tour report 'absent' — a ready project whose
   // tour generation produces nothing (no chunks, empty sections) would otherwise
-  // re-trigger on every poll and drive the client's poll forever (Phase 13.5).
+  // re-trigger on every poll and drive the client's poll forever.
   private readonly attemptedRevision = new Map<string, string>();
 
   constructor(
@@ -39,7 +39,7 @@ export class TourService {
 
   /**
    * The tour plus whether one is coming, so the client knows when to stop
-   * polling (Phase 13.5). On-demand (Phase 12.12): the first GET with no fresh
+   * polling. On-demand: the first GET with no fresh
    * tour kicks off generation; subsequent GETs report 'generating' until it
    * lands ('ready') or an attempt for this revision finished producing nothing
    * ('absent') — the latter stops the poll instead of re-triggering forever.

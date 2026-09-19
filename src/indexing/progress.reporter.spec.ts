@@ -14,7 +14,7 @@ function build() {
   return { onProgress, updateProgress, emit };
 }
 
-describe('ProgressReporter coalescing (Phase 12.10)', () => {
+describe('ProgressReporter coalescing', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(0);

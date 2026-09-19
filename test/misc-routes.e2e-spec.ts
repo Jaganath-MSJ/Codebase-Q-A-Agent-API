@@ -13,7 +13,7 @@ import { ProvidersService } from '../src/providers/providers.service';
  * Tour, change-analysis, search, uploads and providers.
  *
  * The tour/changes pair carries the most contract nuance in the codebase: both
- * return a **status envelope with 200 in every state** (Phase 13.5), because
+ * return a **status envelope with 200 in every state**, because
  * the old 404-for-"not yet" made the client poll forever. The `absent` state is
  * the regression that fix was for, and it is asserted directly.
  */
@@ -128,7 +128,7 @@ describe('Tour, changes, search, uploads and providers routes', () => {
     });
 
     it('TC-MISC-102 returns 200 with status "absent" when there is nothing', async () => {
-      // THE Phase 13.5 regression: this used to 404, and the client polled
+      // THE regression this guards: it used to 404, and the client polled
       // forever. `absent` is how the client knows to stop.
       tourStatus = { status: 'absent', tour: null };
       const res = await h.request(`/projects/${VALID_UUID}/tour`);

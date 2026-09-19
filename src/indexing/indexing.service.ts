@@ -146,7 +146,7 @@ export class IndexingService {
           `Canceled during chunking at ${entry.relPath}`,
         );
 
-      // Read once by the walker (Phase 12.6) — reuse its normalized text/lines
+      // Read once by the walker — reuse its normalized text/lines
       // rather than re-reading from disk.
       const { text, lines } = entry;
       const lang = langFromPath(entry.relPath);
@@ -276,7 +276,7 @@ export class IndexingService {
     let toEmbedChunks = 0;
 
     for (const entry of walkResult.included) {
-      // Reuse the walker's single read (Phase 12.6); release per-entry.
+      // Reuse the walker's single read; release per-entry.
       const { text, lines } = entry;
       const contentHash = sha256(`${CHUNKER_VERSION}\n${text}`);
       const existingFile = existingByPath.get(entry.relPath);

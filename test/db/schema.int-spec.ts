@@ -210,7 +210,6 @@ describe.skipIf(!available)(
           )
         ).map((r) => r.indexname);
 
-        // Phase 12.1 and Phase 14.2.1 respectively.
         expect(names).toContain('chunks_project_id_idx');
         expect(names).toContain('indexing_jobs_project_id_created_idx');
         expect(names).toContain('chunks_tsv_gin');

@@ -1,15 +1,15 @@
-# Phase 12 performance baselines (captured before 12.1)
+# Retrieval and indexing baselines
 
-Numbers to beat/compare after each Phase 12 slice. Re-run the same commands after
-a change and diff. Captured 2026-09-08, embedding model `local:nomic-ai/nomic-embed-text-v1.5`,
+Numbers to compare against after a performance change. Re-run the same commands and
+diff. Captured 2026-09-08, embedding model `local:nomic-ai/nomic-embed-text-v1.5`,
 Postgres on Neon (hosted), single dev machine. Latency is network-bound: the ~350 ms
 floor is the Neon round-trip, not query compute — read the EXPLAIN `Execution Time`
 for the DB-compute signal.
 
-## 12.0.1 — `npm run bench` (retrieval latency)
+## Retrieval latency — `npm run bench`
 
 25 questions × N=20 per query, top_k=10. `db-only` = retriever only, query embedded once
-(isolates the DB cost 12.1 changes); `round-trip` = full `RetrievalService.search` incl. embedding.
+(isolates the DB cost the index changes); `round-trip` = full `RetrievalService.search` incl. embedding.
 
 ### Small repo — "Readme" (1 file, 1 chunk; table held 2384 chunks total)
 
@@ -33,16 +33,11 @@ EXPLAIN vector query: **`Seq Scan on chunks`** (`Rows Removed by Filter: 2383`, 
 EXPLAIN vector query: **`Seq Scan on chunks`** (`Rows Removed by Filter: 1003`, matched 1385)
 + **`Seq Scan on files`** (Hash Join), **Execution Time 8.11 ms**.
 
-### What 12.1 must move
+**Reading these:** the ~350 ms floor is the Neon round-trip, so watch EXPLAIN `Execution Time`
+and the plan node, not p50 wall-clock. Guardrail for any retrieval change: `npm run eval`
+recall@5/@10/MRR must not regress.
 
-- The chunks scan reads the **whole table regardless of project** (no `project_id` index):
-  even the 1-chunk "Readme" query removed 2383 rows by filter. `chunks_project_id_idx` fixes this.
-- DB compute grew **1.04 ms → 8.11 ms** as matched rows went 1 → 1385 — the "latency grows with
-  corpus" the HNSW index removes. It's dwarfed by the ~350 ms Neon RTT, so **watch EXPLAIN
-  `Execution Time` and the plan node** (`Index Scan using chunks_embedding_hnsw`), not p50 wall-clock.
-- Guardrail: `npm run eval` recall@5/@10/MRR must NOT regress.
-
-## 12.0.2 — `npm run bench:index` (indexing throughput)
+## Indexing throughput — `npm run bench:index`
 
 Cold force-index (clears the project's files first so everything re-chunks + re-embeds),
 per-phase wall-clock from `onProgress`. Baseline on "React-Portfolio (local)" — 59 files, 92 chunks:
@@ -57,7 +52,7 @@ per-phase wall-clock from `onProgress`. Baseline on "React-Portfolio (local)" �
 
 `fileCount 59 · chunkCount 92 · embedRequests 23 (= ceil(92/4)) · peak RSS 618.7 MB`
 
-## 12.1 — HNSW + project_id index result (measured after applying 0022)
+## HNSW + project_id index result (measured after applying migration 0022)
 
 Index built correctly and recall is unaffected, but **the planner does not use the HNSW
 index at this corpus size (~2419 chunks total)** — brute-force is genuinely cheaper here.
@@ -87,12 +82,3 @@ infrastructure that engages automatically once repos are large enough. The doc's
 "EXPLAIN shows Index Scan" / "p50 drops" acceptance is a scale property, not met at this
 corpus — and that's correct planner behavior, not a defect. Re-run `evals/topk-stability.ts`
 and this EXPLAIN probe after indexing a genuinely large repo to see the crossover.
-
-### What Phase 2 must move
-
-- **chunking ~20 s** for 59 files is dominated by per-file `replaceFile` round-trips to Neon
-  (+ the double file read) → 12.6 (single read), 12.7 (parallel walk).
-- **embedding ~14 s** for 92 chunks = 23 batches, each paying an N+1 per-chunk `setEmbedding`
-  write (12.5) plus a `sumEmbedRequestsToday()` daily-sum query even for the local provider (12.9).
-- `embedRequests` should drop toward `ceil(chunkCount/batch)` writes (already there) but the
-  **row-write count** should collapse from ~chunkCount to ~batches after 12.5.

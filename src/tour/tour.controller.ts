@@ -31,7 +31,7 @@ export class TourController {
   @Get()
   @ApiOkResponse({ type: TourStatusDto })
   async get(@Param('id', ParseUUIDPipe) id: string): Promise<TourStatusDto> {
-    // Always 200 with a status envelope (Phase 13.5) — no 404 for "not yet",
+    // Always 200 with a status envelope — no 404 for "not yet",
     // so the client can tell 'generating' (keep polling) from 'absent' (stop).
     const { tour, status } = await this.tourService.getTourStatus(id);
     return { status, tour: tour ? toTourDto(tour) : null };

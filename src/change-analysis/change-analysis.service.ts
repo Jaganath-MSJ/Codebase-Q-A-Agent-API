@@ -32,7 +32,7 @@ export class ChangeAnalysisService {
   private readonly inFlight = new Set<string>();
   // The revision each project was last generated FOR (once it completed) — lets a
   // GET that still finds no fresh analysis report 'absent' instead of re-triggering
-  // forever and driving the client's poll without end (Phase 13.5).
+  // forever and driving the client's poll without end.
   private readonly attemptedRevision = new Map<string, string>();
 
   constructor(
@@ -44,7 +44,7 @@ export class ChangeAnalysisService {
 
   /**
    * The analysis plus whether one is coming, so the client knows when to stop
-   * polling (Phase 13.5). Only git projects ever generate; a non-git project
+   * polling. Only git projects ever generate; a non-git project
    * therefore reports 'absent' immediately. Otherwise: 'generating' while an
    * attempt is in flight, 'ready' once a fresh one lands, 'absent' once an
    * attempt for this revision finished producing nothing.

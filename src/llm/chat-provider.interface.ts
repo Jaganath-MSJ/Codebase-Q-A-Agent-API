@@ -46,7 +46,7 @@ export interface ToolResultTurn {
 /**
  * A turn appended after the initial system+user message, for multi-step tool
  * loops. Absent entirely for every existing single-turn caller (condense,
- * summarize, plain RAG generation) — only the Phase 7 agent loop populates it.
+ * summarize, plain RAG generation) — only the agent loop populates it.
  */
 export type PriorTurn =
   | { role: 'assistant'; content: string; toolCalls: ToolCall[] }

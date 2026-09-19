@@ -9,7 +9,7 @@ import type { AppEvent } from './event.types';
  * properties are both about *timing*: a `Subject` is hot, so anything emitted
  * before a subscriber attaches is gone forever, and an unsubscribed consumer
  * must genuinely stop receiving (a leaked EventSource subscription was a real
- * bug in Phase 14.3).
+ * bug here).
  */
 
 const created = (jobId: string): AppEvent => ({

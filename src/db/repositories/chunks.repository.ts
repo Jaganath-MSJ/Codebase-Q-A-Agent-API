@@ -54,7 +54,7 @@ export class ChunksRepository {
   }
 
   /**
-   * One `UPDATE` for a whole batch instead of N single-row updates (Phase 12.5).
+   * One `UPDATE` for a whole batch instead of N single-row updates.
    * Exactly two bound params regardless of row count — an id[] and a text[] of
    * `'[...]'` vector literals — joined via `unnest`, so a large batch never
    * approaches Postgres's 65535-param limit. Each vector must be exactly 768

@@ -12,7 +12,7 @@ import type { ConfigService } from '../config/config.service';
 
 const REV = 'rev-abc';
 
-// The exact strong-validator formula the service uses (Phase 13.6).
+// The exact strong-validator formula the service uses.
 const etagFor = (marker: string, p: string, s: number, e: number, c: number) =>
   `"${createHash('sha256').update(`${marker}|${p}|${s}|${e}|${c}`).digest('hex').slice(0, 32)}"`;
 
@@ -36,7 +36,7 @@ function build(project: Record<string, unknown> | null) {
   );
 }
 
-describe('ProjectsService.getFile ETag (Phase 13.6)', () => {
+describe('ProjectsService.getFile ETag', () => {
   it('short-circuits a matching If-None-Match to a 304 (null dto) without reading disk', async () => {
     // workspacePath is a path that does not exist — if the short-circuit failed
     // and it tried to read the file, this would throw instead of returning null.

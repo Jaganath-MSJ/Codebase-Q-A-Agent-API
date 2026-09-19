@@ -17,7 +17,7 @@ function build(project: Record<string, unknown> | null) {
   );
 }
 
-describe('TourService on-demand generation (Phase 12.12)', () => {
+describe('TourService on-demand generation', () => {
   it('triggers generation when no tour exists for the current revision', async () => {
     const svc = build({
       id: 'p1',
@@ -90,7 +90,7 @@ describe('TourService on-demand generation (Phase 12.12)', () => {
 // the attempt) has run before the next assertion.
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
-describe('TourService status envelope (Phase 13.5)', () => {
+describe('TourService status envelope', () => {
   it("reports 'ready' with the tour when a fresh one exists", async () => {
     const tour = { revision: REV, summary: '', sections: [], generatedAt: 'x' };
     const svc = build({ id: 'p1', status: 'ready', headRevision: REV, tour });

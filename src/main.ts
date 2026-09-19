@@ -13,7 +13,7 @@ installProcessBackstops();
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // gzip JSON responses (Phase 12.15). CRITICAL: never compress SSE — compression
+  // gzip JSON responses. CRITICAL: never compress SSE — compression
   // buffers the response, which would stall the chat and indexing streams that
   // depend on token-by-token flushing. Everything else uses the default filter.
   app.use(

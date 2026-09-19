@@ -12,7 +12,7 @@ import type {
 // console.groq.com/docs/models — the strongest model on Groq's free tier for
 // code reasoning (per docs/research-free-ai-providers.md). The model itself
 // supports tool calling, but this provider doesn't wire up tool definitions
-// yet (that's Phase 7) — hence supportsTools: false below, not a model limit.
+// yet — hence supportsTools: false below, not a model limit.
 const MODEL_ID = 'openai/gpt-oss-120b';
 
 function toStopReason(reason: string | null | undefined): ChatStopReason {

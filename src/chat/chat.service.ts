@@ -54,7 +54,7 @@ const FLUSH_INTERVAL_MS = 400;
 const CONDENSATION_WINDOW = 2;
 const GENERATION_WINDOW = 3;
 const SUMMARY_TRIGGER_EXCHANGES = 6;
-// Phase 12.4 output caps (tunable). Generation is generous — a full cited answer
+// Output caps (tunable). Generation is generous — a full cited answer
 // must fit; condense (a one-line standalone query) and summary (a rolling digest)
 // are short by intent. NOTE: gemini-flash-latest counts its internal "thinking"
 // tokens against maxOutputTokens (measured: a 256 cap left only ~11 output
@@ -132,7 +132,7 @@ export class ChatService {
   }
 
   /**
-   * A conversation spanning 2+ projects — Fast/RAG mode only (Phase 7's tool
+   * A conversation spanning 2+ projects — Fast/RAG mode only (the tool
    * executors are single-projectId-scoped throughout, so Thorough mode stays
    * blocked for these; see `ChatController`'s mode-forcing). `projectId` on
    * the created row is the first id given, purely so every pre-existing
@@ -282,7 +282,7 @@ export class ChatService {
   }
 
   /**
-   * Runs the Phase 7 agent loop instead of RAG retrieval: no condensation, no
+   * Runs the agent loop instead of RAG retrieval: no condensation, no
    * upfront `search` — the model fetches its own evidence via tool calls, and
    * every concrete region it observes (a `search_code` snippet, a `read_file`
    * range) becomes a numbered evidence-ledger entry. Citations are parsed and
@@ -731,7 +731,7 @@ export class ChatService {
     query: string,
     limit: number,
   ): Promise<ScoredChunkWithProject[]> {
-    // Embed the query ONCE for the whole fan-out (Phase 12.11); each per-project
+    // Embed the query ONCE for the whole fan-out; each per-project
     // hybrid search reuses this vector instead of re-embedding M times.
     const queryVector = await this.retrievalService.embedQuery(query);
 

@@ -19,7 +19,7 @@ import { loadGitignoreFilter } from './gitignore';
 interface WalkedFile {
   relPath: string;
   absPath: string;
-  // Read once here (Phase 12.6) so the indexer doesn't re-read from disk. The
+  // Read once here so the indexer doesn't re-read from disk. The
   // CRLF→LF normalization goes through read-file.ts's `toLines`, so `text` is
   // byte-identical to a `readSourceFile` and `contentHash` never spuriously
   // changes. The indexer releases these per-entry after chunking to bound memory.

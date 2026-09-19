@@ -496,7 +496,7 @@ describe('IndexingService.indexProject', () => {
   });
 
   it('TC-IDX-061 releases file content after chunking to bound memory', async () => {
-    // Phase 12.6 keeps the walker's read in memory; it must be drained as
+    // The walker's read is kept in memory; it must be drained as
     // chunking advances rather than held through the embedding phase.
     const entries = [
       entry('a.ts', 'const a = 1;'),

@@ -75,7 +75,7 @@ export class RetrievalService {
     return this.vectorRetriever.search(projectId, queryVector, limit);
   }
 
-  /** Embed a query once (Phase 12.11) so a multi-project fan-out can reuse the vector. */
+  /** Embed a query once so a multi-project fan-out can reuse the vector. */
   async embedQuery(query: string): Promise<number[]> {
     return this.embeddingProvider.embedQuery(query);
   }

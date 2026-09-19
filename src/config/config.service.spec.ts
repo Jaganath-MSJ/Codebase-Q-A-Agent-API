@@ -7,8 +7,8 @@ function config(env: Partial<Env>): ConfigService {
 }
 
 describe('ConfigService.llmCacheEnabled', () => {
-  // Phase 12.3: the cache is now enabled in production too — the NODE_ENV gate
-  // is gone, and only LLM_CACHE=off disables it.
+  // The cache is enabled in production too — the NODE_ENV gate is gone, and
+  // only LLM_CACHE=off disables it.
   it('is enabled in production (no longer gated on NODE_ENV)', () => {
     expect(
       config({ NODE_ENV: 'production', LLM_CACHE: 'on' }).llmCacheEnabled,

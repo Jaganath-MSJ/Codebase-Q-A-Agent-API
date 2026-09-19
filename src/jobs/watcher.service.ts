@@ -19,7 +19,7 @@ import type { ProjectRow } from '../db/schema';
 const WATCH_DEBOUNCE_MS = 30_000;
 // How often to notice a new local_path project (or a deleted one) — cheap
 // (one small-table `SELECT *`), unlike the per-keystroke DB polling this
-// project has already rejected once (Phase 2). Not the file-content watch
+// project has already rejected once. Not the file-content watch
 // itself, which is push-based (fs.watch), not polled.
 const PROJECT_POLL_MS = 60_000;
 
@@ -30,8 +30,8 @@ interface WatchEntry {
 
 /**
  * Watches every already-indexed `local_path` project's workspace and
- * auto-enqueues a re-index (debounced) when a file changes — Phase 4's
- * revision early exit means a burst of saves that nets out to no real change
+ * auto-enqueues a re-index (debounced) when a file changes — the revision
+ * early exit means a burst of saves that nets out to no real change
  * (e.g. an editor writing then reverting) still costs only a cheap walk, not
  * a full re-embed. `git_url`/`git_private` projects are handled by the
  * sibling `GitPollService` instead (periodic remote-head check, not a

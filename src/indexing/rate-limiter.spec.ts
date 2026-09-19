@@ -24,7 +24,7 @@ function jobsRepo(usedToday: number) {
   };
 }
 
-describe('EmbeddingRateLimiter.reserve — provider gating (Phase 12.9)', () => {
+describe('EmbeddingRateLimiter.reserve — provider gating', () => {
   it('skips the daily-sum DB aggregate entirely for the local provider', async () => {
     const { repo, sumEmbedRequestsToday } = jobsRepo(0);
     const limiter = new EmbeddingRateLimiter(

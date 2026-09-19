@@ -20,7 +20,7 @@ const MAX_STEPS = 8;
 // whole growing conversation, so input tokens alone can blow past a sane
 // budget well before 8 steps on a chatty model. Checked between steps.
 const MAX_TOTAL_TOKENS = 50_000;
-// Phase 12.4: generous per-step output cap — a step may emit the full final
+// Generous per-step output cap — a step may emit the full final
 // answer, so match the RAG generation cap. (MAX_TOTAL_TOKENS still bounds the
 // whole loop across steps.)
 const AGENT_MAX_TOKENS = 2048;

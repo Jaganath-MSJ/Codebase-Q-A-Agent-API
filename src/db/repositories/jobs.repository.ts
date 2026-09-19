@@ -47,7 +47,7 @@ export class JobsRepository {
   }
 
   /**
-   * The latest job for each of `projectIds` in ONE query (Phase 12.16) — DISTINCT
+   * The latest job for each of `projectIds` in ONE query — DISTINCT
    * ON keeps, per project, the row that sorts first under `project_id, created_at
    * DESC`, i.e. the most recent. Lets the projects list embed each row's latest
    * job so the dashboard doesn't fetch one per project.

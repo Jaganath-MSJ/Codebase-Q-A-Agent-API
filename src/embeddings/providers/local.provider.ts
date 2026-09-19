@@ -36,7 +36,7 @@ export function truncateForEmbedding(text: string): string {
 // ~1.46 GB, while a flat batch of 32 at that same worst case extrapolates to the
 // ~14 GB spikes that OOM an 8 GB machine.
 //
-// Phase 12.8: instead of a flat batch of 4, the indexer hands us up to
+// Instead of a flat batch of 4, the indexer hands us up to
 // MAX_OUTER_BATCH chunks and we split them into length-bucketed sub-batches
 // whose padded cost (count * maxLen^2) never exceeds that proven-safe flat-4-at-
 // ceiling budget. Short chunks — the common case — pack dozens per sub-batch

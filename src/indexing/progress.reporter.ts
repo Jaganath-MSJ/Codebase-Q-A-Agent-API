@@ -3,7 +3,7 @@ import { JobsRepository } from '../db/repositories/jobs.repository';
 import { EventBusService } from '../events/event-bus.service';
 import type { IndexProgress, OnIndexProgress } from './indexing.service';
 
-// Coalesce the per-file `UPDATE indexing_jobs` to ~this cadence (Phase 12.10) so
+// Coalesce the per-file `UPDATE indexing_jobs` to ~this cadence so
 // a large repo does O(seconds) progress writes instead of ~filesTotal.
 const FLUSH_INTERVAL_MS = 500;
 

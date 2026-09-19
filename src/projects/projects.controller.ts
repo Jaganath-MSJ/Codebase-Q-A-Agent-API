@@ -71,7 +71,7 @@ export class ProjectsController {
   @ApiOkResponse({ type: ProjectDto, isArray: true })
   async findAll(): Promise<ProjectDto[]> {
     const rows = await this.projectsService.findAll();
-    // One batched query for every project's latest job (Phase 12.16) so the
+    // One batched query for every project's latest job so the
     // dashboard reads job state from this list instead of a fetch per row.
     const latest = await this.jobsService.findLatestForProjects(
       rows.map((r) => r.id),
@@ -121,8 +121,8 @@ export class ProjectsController {
       req.headers['if-none-match'],
     );
     // Source content is immutable within an index, so revalidate cheaply via the
-    // ETag on a cold reload / cross-session (Phase 13.6) — in-session, the web's
-    // staleTime:Infinity (13.2) already avoids the request. `private`: user-scoped
+    // ETag on a cold reload / cross-session — in-session, the web's
+    // staleTime:Infinity already avoids the request. `private`: user-scoped
     // source, never shared-cached; `max-age=0, must-revalidate`: always check the
     // ETag, which a matching If-None-Match answers with a 304 (no disk read, no body).
     res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');

@@ -20,7 +20,7 @@ export const EMBEDDING_PROVIDER_TOKEN = Symbol('EMBEDDING_PROVIDER');
         if (config.embeddingProvider !== 'local') {
           throw new Error(
             `Embedding provider '${config.embeddingProvider}' is not implemented yet — ` +
-              `Phase 1 only supports 'local'.`,
+              `only 'local' is supported.`,
           );
         }
         return new CachingEmbeddingProvider(

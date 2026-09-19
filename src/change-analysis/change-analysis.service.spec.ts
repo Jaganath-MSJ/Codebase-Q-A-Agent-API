@@ -19,7 +19,7 @@ function build(project: Record<string, unknown> | null) {
   );
 }
 
-describe('ChangeAnalysisService on-demand generation (Phase 12.12)', () => {
+describe('ChangeAnalysisService on-demand generation', () => {
   it('triggers for a git project with no analysis for the current revision', async () => {
     const svc = build({
       id: 'p1',
@@ -89,7 +89,7 @@ describe('ChangeAnalysisService on-demand generation (Phase 12.12)', () => {
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
-describe('ChangeAnalysisService status envelope (Phase 13.5)', () => {
+describe('ChangeAnalysisService status envelope', () => {
   it("reports 'ready' with the analysis when a fresh one exists", async () => {
     const analysis = {
       revision: REV,

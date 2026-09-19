@@ -5,7 +5,7 @@ export default defineConfig({
     include: [
       'src/**/*.spec.ts',
       'evals/**/*.spec.ts',
-      // Phase 15 QA layers. `.e2e-spec.ts` boots the real Nest app with fake
+      // QA layers. `.e2e-spec.ts` boots the real Nest app with fake
       // providers (L2); `.int-spec.ts` talks to a real Postgres (L3) and skips
       // itself when DATABASE_URL_TEST is unset, so the suite stays green on a
       // machine with no database.

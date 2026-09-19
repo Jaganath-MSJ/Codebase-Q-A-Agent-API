@@ -484,7 +484,7 @@ describe('Chat routes and SSE', () => {
     });
 
     it('TC-CHAT-222 a multi-project conversation is forced to fast', async () => {
-      // Phase 7's tool executors are single-project scoped, so thorough has no
+      // The tool executors are single-project scoped, so thorough has no
       // meaningful multi-project behaviour to fall back to.
       streamCalls = [];
       isMulti = true;

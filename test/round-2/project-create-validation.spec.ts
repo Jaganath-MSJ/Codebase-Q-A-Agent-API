@@ -11,7 +11,7 @@ import { ProjectsService } from '../../src/projects/projects.service';
  * conditional on `sourceKind`, so it lives in `ProjectsService.create` beside
  * the pre-existing `zip_upload` check rather than in the DTO. The L2 harness
  * stubs `ProjectsService` wholesale, so it cannot see this at all — the same
- * structural blind spot that let DEF-015 survive Phase 15. These run the real
+ * structural blind spot that let DEF-015 survive its QA pass. These run the real
  * service against a real temp directory, with fakes only at the repository
  * boundary.
  */

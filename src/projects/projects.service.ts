@@ -239,7 +239,7 @@ export class ProjectsService {
       );
     }
 
-    // 3. Freshness. Strong validator (Phase 13.6): file content is immutable
+    // 3. Freshness. Strong validator: file content is immutable
     //    within an index, so headRevision (the content-tree hash, bumped on
     //    every re-index) plus the exact view coordinates uniquely identify this
     //    response. A matching If-None-Match lets us answer 304 without reading.

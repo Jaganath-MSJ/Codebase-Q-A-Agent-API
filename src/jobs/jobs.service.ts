@@ -51,7 +51,7 @@ export class JobsService {
     return this.jobsRepository.findLatestByProject(projectId);
   }
 
-  /** Latest job per project, keyed by projectId — one query for the whole list (Phase 12.16). */
+  /** Latest job per project, keyed by projectId — one query for the whole list. */
   async findLatestForProjects(
     projectIds: string[],
   ): Promise<Map<string, IndexingJobRow>> {

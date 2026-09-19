@@ -18,9 +18,9 @@ import { IndexingService } from '../src/indexing/indexing.service';
  * These nine routes had no coverage of any kind before this slice.
  *
  * Note the shape of the negative cases. `forbidNonWhitelisted` and
- * `ParseUUIDPipe` were both added in Phase 14.2 specifically so malformed input
- * becomes a 400 instead of a 500 or a silent accept; each now has a test that
- * fails loudly if that regresses.
+ * `ParseUUIDPipe` were both added specifically so malformed input becomes a
+ * 400 instead of a 500 or a silent accept; each now has a test that fails
+ * loudly if that regresses.
  */
 
 const NOW = new Date('2026-01-01T00:00:00.000Z');
@@ -309,7 +309,7 @@ describe('Projects and jobs routes', () => {
     });
 
     it('TC-API-122 [INV-2] never leaks sourceRef or an absolute machine path', async () => {
-      // Phase 14.1.1 removed `sourceRef` from ProjectDto because it exposed the
+      // `sourceRef` was removed from ProjectDto because it exposed the
       // server's native path (local_path) or a private repo URL. CLAUDE.md
       // states workspace_path/source_ref are server-side only.
       const res = await h.request('/projects');

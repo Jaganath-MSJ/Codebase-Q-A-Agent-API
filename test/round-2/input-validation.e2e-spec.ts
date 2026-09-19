@@ -20,7 +20,7 @@ import { TourService } from '../../src/tour/tour.service';
  *
  * Each `[DEFECT ...]` case asserts **today's behaviour**, not the desired one,
  * so the reproduction survives until someone fixes it. Invert the assertion in
- * the fixing slice — the Phase 16 convention.
+ * the fixing slice — the project convention.
  *
  * The non-defect cases around them are deliberate: they hold the line that was
  * already correct, so a fix for one of these cannot quietly widen into the
@@ -291,8 +291,8 @@ describe('QA round 2 — input validation and existence checks', () => {
       // fabricated id.
       //
       // The sibling GET is NOT a defect and is unchanged: returning 200
-      // `{status:'absent'}` in every state is the deliberate Phase 13.5
-      // contract that stopped the client polling a 404 forever. Only the POST
+      // `{status:'absent'}` in every state is the deliberate contract that
+      // stopped the client polling a 404 forever. Only the POST
       // was missing its guard.
       tourGenerateCalledWith = [];
       const res = await h.request(`/projects/${UNKNOWN_UUID}/tour`, {

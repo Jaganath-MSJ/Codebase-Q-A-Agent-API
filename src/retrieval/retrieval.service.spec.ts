@@ -45,7 +45,7 @@ function build(projectOverrides: Record<string, unknown> = {}) {
   return { svc, hybridRetriever, vectorRetriever, embedQuery };
 }
 
-describe('RetrievalService.searchWithQueryVector (Phase 12.11)', () => {
+describe('RetrievalService.searchWithQueryVector', () => {
   it('runs hybrid search with the supplied vector and does NOT re-embed', async () => {
     const { svc, hybridRetriever, embedQuery } = build();
     const vec = [0.5, 0.6, 0.7];

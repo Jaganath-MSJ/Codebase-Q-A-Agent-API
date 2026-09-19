@@ -218,8 +218,8 @@ describe.skipIf(!available)(
       });
 
       it('TC-DB-122 writes embeddings in bulk with two bound parameters', async () => {
-        // Phase 12.5: one UPDATE ... FROM unnest(...) regardless of row count,
-        // to stay clear of the 65535-parameter limit.
+        // One UPDATE ... FROM unnest(...) regardless of row count, to stay
+        // clear of the 65535-parameter limit.
         const projectId = await seedProject();
         const fileId = await seedFile(projectId);
         const ids: string[] = [];
@@ -235,8 +235,8 @@ describe.skipIf(!available)(
       });
 
       it('TC-DB-124 findByPaths groups chunks by path in one query (the N+1 fix)', async () => {
-        // Phase 14.2.8. Lives on ChunksRepository (not FilesRepository) and
-        // returns a Map keyed by path, each list in chunk order.
+        // Lives on ChunksRepository (not FilesRepository) and returns a Map
+        // keyed by path, each list in chunk order.
         const projectId = await seedProject();
         const fileA = await seedFile(projectId, 'src/a.ts');
         const fileB = await seedFile(projectId, 'src/b.ts');

@@ -168,7 +168,7 @@ export const chunks = pgTable(
     unique().on(table.fileId, table.ord),
     index('chunks_tsv_gin').using('gin', table.tsv),
     index('chunks_trgm_gin').using('gin', table.searchText.op('gin_trgm_ops')),
-    // Phase 12.1: ANN vector search. Partial (embedded rows only) HNSW index over
+    // ANN vector search. Partial (embedded rows only) HNSW index over
     // cosine distance on halfvec(768). Opclass MUST be halfvec_cosine_ops to match
     // the column type and the `<=>`/cosineDistance operator in vector.retriever.ts;
     // the partial predicate mirrors that retriever's `isNotNull(embedding)` filter.
@@ -275,7 +275,7 @@ export const conversations = pgTable('conversations', {
 export type ConversationRow = typeof conversations.$inferSelect;
 export type NewConversationRow = typeof conversations.$inferInsert;
 
-// Phase 8: lets a conversation span more than one project. Deliberately a
+// Lets a conversation span more than one project. Deliberately a
 // join table alongside `conversations.project_id`, not a replacement for it,
 // and deliberately populated ONLY for conversations actually created as
 // multi-project (2+ rows) — an ordinary single-project conversation has ZERO
@@ -321,7 +321,7 @@ export const messages = pgTable(
     inputTokens: integer('input_tokens'),
     outputTokens: integer('output_tokens'),
     latencyMs: integer('latency_ms'),
-    // Phase 7: the full agent-loop trajectory — [{tool, args, resultSummary, ms}] — null for RAG answers.
+    // The full agent-loop trajectory — [{tool, args, resultSummary, ms}] — null for RAG answers.
     toolTrace: jsonb('tool_trace'),
     error: text('error'),
     createdAt: timestamp('created_at', { withTimezone: true })
