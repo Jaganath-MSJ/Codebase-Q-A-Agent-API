@@ -73,3 +73,13 @@ Latency and indexing-throughput baselines, plus the HNSW index findings, are in
 Architecture, the full DDL, and the reasoning behind every decision live in `../docs`.
 Start with `docs/PLAN.md`; `docs/architecture.md` is the deep reference. Standing
 context for working in this repository is in [`CLAUDE.md`](CLAUDE.md).
+
+## Security
+
+The service has **no authentication** and is built to run on localhost. See
+[SECURITY.md](SECURITY.md) before exposing it anywhere, and for how untrusted repos,
+zips and credentials are handled.
+
+## License
+
+[MIT](LICENSE).
